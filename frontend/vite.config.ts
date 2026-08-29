@@ -8,6 +8,10 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
+    // يسمح لحاوية أدوات المراجعة (Playwright) بالوصول لخادم التطوير
+    allowedHosts: ['host.docker.internal'],
+    // bind mounts على ويندوز لا توصل أحداث تغيير الملفات — المراقبة بالاستطلاع ضرورية
+    watch: { usePolling: true, interval: 300 },
     proxy: {
       '/api': {
         target: 'http://backend:8000',
