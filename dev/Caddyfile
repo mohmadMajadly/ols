@@ -1,0 +1,14 @@
+# بوابة HTTPS للتطوير فقط — شهادات ذاتية التوقيع (سلطة Caddy الداخلية)
+# تتيح تجربة الميكروفون من الجوال/الأجهزة الأخرى: https://<IP الجهاز>:5174
+# الإنتاج له إعداد Caddy مستقل بشهادات حقيقية.
+{
+	auto_https disable_redirects
+	local_certs
+}
+
+:5174 {
+	tls internal {
+		on_demand
+	}
+	reverse_proxy frontend:5173
+}

@@ -43,7 +43,21 @@ services:
     depends_on:
       - backend
 
+  # بوابة HTTPS للتطوير (شهادة ذاتية) — تتيح الميكروفون من أجهزة الشبكة:
+  # https://<IP الجهاز>:5174 — انظر dev/Caddyfile
+  https-dev:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    volumes:
+      - ./dev/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_dev_data:/data
+    ports:
+      - "5174:5174"
+    depends_on:
+      - frontend
+
 volumes:
   pgdata:
   frontend_node_modules:
   media:
+  caddy_dev_data:
