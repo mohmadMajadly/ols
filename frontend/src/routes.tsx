@@ -4,10 +4,10 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './app/AppShell'
 import type { UserRole } from './auth/AuthContext'
 import { useAuth } from './auth/AuthContext'
+import { DashboardPage } from './pages/DashboardPage'
 import { GroupsPage } from './pages/GroupsPage'
 import { LiveSessionPage } from './pages/live/LiveSessionPage'
 import LoginPage from './pages/LoginPage'
-import { PlaceholderPage } from './pages/PlaceholderPage'
 import { SettingsPage } from './pages/settings/SettingsPage'
 import { SessionDetailPage } from './pages/sessions/SessionDetailPage'
 import { SessionsPage } from './pages/sessions/SessionsPage'
@@ -72,7 +72,7 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<PlaceholderPage title="لوحة التحكم" />} />
+        <Route index element={<DashboardPage />} />
         <Route path="students" element={<StudentsPage />} />
         <Route path="students/:id" element={<StudentDetailPage />} />
         <Route path="groups" element={<GroupsPage />} />

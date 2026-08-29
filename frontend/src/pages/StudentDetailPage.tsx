@@ -215,7 +215,10 @@ export function StudentDetailPage() {
                 {stats.repeated_mistakes.map((m) => (
                   <li key={`${m.surah}:${m.ayah}`} className="flex flex-wrap items-center gap-2.5 py-2 text-sm">
                     <AyahChip surah={m.surah_name} ayah={m.ayah} />
-                    <span className="font-time tabular-nums text-hibr">{m.count} مرات</span>
+                    <span className="flex items-baseline gap-1">
+                      <span className="font-time tabular-nums text-hibr">{m.count}</span>
+                      <span className="text-hibr-2">مرات</span>
+                    </span>
                     <span className="text-hibr-2">{m.categories.join('، ')}</span>
                   </li>
                 ))}

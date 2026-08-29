@@ -48,12 +48,24 @@ export function roundedRectPathTop(x: number, y: number, w: number, h: number, r
   ].join(' ')
 }
 
-const axisDateFormatter = new Intl.DateTimeFormat('en-GB', { month: 'short', day: 'numeric' })
+const AXIS_DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
-/** تاريخ مختصر لمحور x (مثال: 12 Aug) — عرض رسومي وليس عرض تاريخ سجلّي، فلا يخضع
- * لقاعدة الهجري+الميلادي المزدوجة في lib/date.ts (تلك للتواريخ في النصوص والسجلات). */
+/** تاريخ مختصر لمحور x بأرقام لاتينية بصيغة يوم/شهر (مثال: 29/08) — عرض رسومي مضغوط
+ * بلا اسم شهر أجنبي وبلا أرقام هندية مختلطة عن بقية أرقام الرسوم (tabular-nums لاتينية
+ * في كل مكان)، وليس عرض تاريخ سجلّي فلا يخضع لقاعدة الهجري+الميلادي المزدوجة في
+ * lib/date.ts (تلك للتواريخ في النصوص والسجلات). */
 export function formatAxisDate(value: string | Date): string {
-  const date = value instanceof Date ? value : new Date(value)
+  // تاريخ بلا وقت (مثل date من نقاط الرسم اليومية) يُحلَّل بمكوّناته المحلية مباشرة
+  // كي لا ينزاح يوماً كاملاً عند تفسيره كـ UTC منتصف الليل في التوقيتات السالبة.
+  let date: Date
+  if (typeof value === 'string' && AXIS_DATE_ONLY_PATTERN.test(value)) {
+    const [year, month, day] = value.split('-').map(Number)
+    date = new Date(year, month - 1, day)
+  } else {
+    date = value instanceof Date ? value : new Date(value)
+  }
   if (Number.isNaN(date.getTime())) return ''
-  return axisDateFormatter.format(date)
+  const day = String(date.getDate()).padStart(2, '0')
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  return `${day}/${month}`
 }
