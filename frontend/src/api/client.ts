@@ -16,11 +16,11 @@ export class ApiError extends Error {
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`/api${path}`, {
     credentials: 'include',
+    ...options,
     headers: {
       'Content-Type': 'application/json',
       ...options.headers,
     },
-    ...options,
   })
 
   if (!response.ok) {
