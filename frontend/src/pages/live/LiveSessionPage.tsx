@@ -463,14 +463,21 @@ export function LiveSessionPage() {
                 <IconBook className="h-4 w-4" />
                 المصحف
               </button>
-              {hasRange && (
+              {/* الزر ظاهر دائماً (اكتشافية) — التعطيل مع سبب واضح بدل الإخفاء الصامت */}
+              {
                 <button
                   type="button"
                   onClick={handleToggleTracking}
-                  disabled={!mushafOpen || !isRecording}
+                  disabled={!hasRange || !mushafOpen || !isRecording}
                   aria-pressed={trackingOn}
                   data-testid="toggle-tracking"
-                  title={!mushafOpen ? 'افتح المصحف أولاً لتفعيل التتبع' : undefined}
+                  title={
+                    !hasRange
+                      ? 'حدد نطاق الآيات عند بدء الجلسة (من سورة وآية إلى سورة وآية) لتفعيل التتبع'
+                      : !mushafOpen
+                        ? 'افتح المصحف أولاً لتفعيل التتبع'
+                        : undefined
+                  }
                   className={cx(
                     'flex h-9 items-center gap-1.5 rounded-control border px-3 text-sm transition-colors duration-150 disabled:opacity-40',
                     trackingOn
@@ -481,7 +488,7 @@ export function LiveSessionPage() {
                   <IconTracking className="h-4 w-4" />
                   التتبع
                 </button>
-              )}
+              }
               {isRecording && (
                 <button
                   type="button"
