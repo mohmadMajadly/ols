@@ -21,17 +21,27 @@ const FOCUSABLE_SELECTOR =
 export function Modal({ open, onClose, title, children, footer }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
 
+  // onClose غالباً دالة سهمية تتجدد مع كل إعادة رسم للصفحة الأم؛ نثبتها في
+  // ref حتى لا يُعاد تشغيل تأثير مصيدة التركيز مع كل حرف يُكتب في الحقول
+  // (كان ذلك يسرق التركيز من الحقل إلى زر الإغلاق بعد أول حرف).
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  })
+
   useEffect(() => {
     if (!open) return
 
     const previouslyFocused = document.activeElement as HTMLElement | null
     const panel = panelRef.current
-    const focusables = panel?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
-    ;(focusables?.[0] ?? panel)?.focus()
+    const focusables = Array.from(panel?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [])
+    // التركيز الأولي: أول عنصر بعد زر الإغلاق (أول حقل عادةً)، لا الزر نفسه
+    const initial = focusables.find((el) => el.getAttribute('aria-label') !== 'إغلاق')
+    ;(initial ?? panel)?.focus()
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        onClose()
+        onCloseRef.current()
         return
       }
       if (event.key !== 'Tab' || !panel) return
@@ -55,7 +65,7 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
       document.removeEventListener('keydown', handleKeyDown)
       previouslyFocused?.focus()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
