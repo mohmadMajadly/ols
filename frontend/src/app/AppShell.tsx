@@ -4,22 +4,34 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 
+import type { UserRole } from '../auth/AuthContext'
 import { roleLabels, useAuth } from '../auth/AuthContext'
 import { Button } from '../ui/Button'
-import { IconCircles, IconDashboard, IconLogout, IconMenu, IconSessions, IconSettings, IconStudents } from '../ui/icons'
+import {
+  IconCircles,
+  IconDashboard,
+  IconLogout,
+  IconMenu,
+  IconSessions,
+  IconSettings,
+  IconStudents,
+  IconUser,
+} from '../ui/icons'
 import { cx } from '../ui/utils'
 
-const NAV_ITEMS = [
+const NAV_ITEMS: Array<{ to: string; label: string; icon: typeof IconDashboard; end: boolean; roles?: UserRole[] }> = [
   { to: '/', label: 'لوحة التحكم', icon: IconDashboard, end: true },
   { to: '/students', label: 'الطلاب', icon: IconStudents, end: false },
-  { to: '/circles', label: 'الحلقات', icon: IconCircles, end: false },
+  { to: '/groups', label: 'الحلقات', icon: IconCircles, end: false },
   { to: '/sessions', label: 'الجلسات', icon: IconSessions, end: false },
-  { to: '/settings', label: 'الإعدادات', icon: IconSettings, end: false },
+  { to: '/users', label: 'المستخدمون', icon: IconUser, end: false, roles: ['admin'] },
+  { to: '/settings', label: 'الإعدادات', icon: IconSettings, end: false, roles: ['admin', 'supervisor', 'student'] },
 ]
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const visibleItems = NAV_ITEMS.filter((item) => !item.roles || (user && item.roles.includes(user.role)))
 
   async function handleLogout() {
     await logout()
@@ -35,7 +47,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
       <nav className="flex-1 overflow-y-auto p-3">
         <ul className="flex flex-col gap-1">
-          {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
+          {visibleItems.map(({ to, label, icon: Icon, end }) => (
             <li key={to}>
               <NavLink
                 to={to}

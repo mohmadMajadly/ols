@@ -21,10 +21,13 @@ export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement
   error?: string
 }
 
-export function Select({ label, options, placeholder, help, error, id, className, ...rest }: SelectProps) {
+export function Select({ label, options, placeholder, help, error, id, className, value, defaultValue, ...rest }: SelectProps) {
   const generatedId = useId()
   const fieldId = id ?? generatedId
   const describedBy = error ? `${fieldId}-error` : help ? `${fieldId}-help` : undefined
+  // دعم الاستخدام غير المتحكَّم به (defaultValue/بلا شيء) والمتحكَّم به (value) معاً
+  // بلا تحذير React — لا نمرر defaultValue إطلاقاً حين تُستخدم value.
+  const uncontrolledDefaultValue = value === undefined ? (defaultValue ?? (placeholder ? '' : undefined)) : undefined
 
   return (
     <div>
@@ -36,7 +39,8 @@ export function Select({ label, options, placeholder, help, error, id, className
           id={fieldId}
           aria-invalid={Boolean(error) || undefined}
           aria-describedby={describedBy}
-          defaultValue={placeholder ? '' : undefined}
+          value={value}
+          defaultValue={uncontrolledDefaultValue}
           className={cx(
             fieldBaseClasses,
             'h-10 appearance-none ps-3 pe-9 text-base',

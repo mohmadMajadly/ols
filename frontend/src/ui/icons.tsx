@@ -133,6 +133,32 @@ export function IconInbox(props: IconProps) {
   )
 }
 
+export function IconUser(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="8.5" r="3.5" />
+      <path d="M4.5 20c0-3.87 3.13-7 7.5-7s7.5 3.13 7.5 7" />
+    </svg>
+  )
+}
+
+export function IconPlus(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 5.5v13M5.5 12h13" />
+    </svg>
+  )
+}
+
+export function IconSearch(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="M19.5 19.5l-4.2-4.2" />
+    </svg>
+  )
+}
+
 export function IconLogout(props: IconProps) {
   return (
     <svg {...base} {...props}>

@@ -2,10 +2,15 @@ import type { ReactNode } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
 import { AppShell } from './app/AppShell'
+import type { UserRole } from './auth/AuthContext'
 import { useAuth } from './auth/AuthContext'
+import { GroupsPage } from './pages/GroupsPage'
 import LoginPage from './pages/LoginPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
+import { StudentDetailPage } from './pages/StudentDetailPage'
+import { StudentsPage } from './pages/StudentsPage'
 import { UiGalleryPage } from './pages/UiGalleryPage'
+import { UsersPage } from './pages/UsersPage'
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, isLoading } = useAuth()
@@ -29,6 +34,15 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+/** حارس صلاحية على مستوى المسار — يعيد التوجيه لمن ليس دوره ضمن roles. */
+function RoleGuard({ roles, children }: { roles: UserRole[]; children: ReactNode }) {
+  const { user } = useAuth()
+  if (!user || !roles.includes(user.role)) {
+    return <Navigate to="/" replace />
+  }
+  return <>{children}</>
+}
+
 export default function AppRoutes() {
   return (
     <Routes>
@@ -45,9 +59,18 @@ export default function AppRoutes() {
         }
       >
         <Route index element={<PlaceholderPage title="لوحة التحكم" />} />
-        <Route path="students" element={<PlaceholderPage title="الطلاب" />} />
-        <Route path="circles" element={<PlaceholderPage title="الحلقات" />} />
+        <Route path="students" element={<StudentsPage />} />
+        <Route path="students/:id" element={<StudentDetailPage />} />
+        <Route path="groups" element={<GroupsPage />} />
         <Route path="sessions" element={<PlaceholderPage title="الجلسات" />} />
+        <Route
+          path="users"
+          element={
+            <RoleGuard roles={['admin']}>
+              <UsersPage />
+            </RoleGuard>
+          }
+        />
         <Route path="settings" element={<PlaceholderPage title="الإعدادات" />} />
       </Route>
 
