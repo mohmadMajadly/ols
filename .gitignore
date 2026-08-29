@@ -1,0 +1,23 @@
+# env
+.env
+
+# node
+node_modules/
+dist/
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.venv/
+
+# postgres data
+pgdata/
+
+# media
+media/
+
+# misc
+.DS_Store
+*.log
