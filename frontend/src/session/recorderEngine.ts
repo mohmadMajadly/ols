@@ -141,12 +141,30 @@ export class RecorderEngine {
     this.phase = 'acquiring'
     this.emit()
 
+    // المتصفحات تمنع الميكروفون كلياً على HTTP غير الآمن (عدا localhost) دون
+    // عرض أي طلب إذن — نشخّص الحالة بدقة بدل رسالة عامة مضللة
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      this.fail(
+        'المتصفح يمنع الميكروفون على اتصال غير آمن. من هذا الجهاز افتح التطبيق عبر http://localhost:5173 — ومن الأجهزة الأخرى يلزم HTTPS',
+      )
+      return
+    }
+
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       })
-    } catch {
-      this.fail('تعذر الوصول إلى الميكروفون — تأكد من منح الإذن للموقع ثم أعد المحاولة')
+    } catch (err) {
+      const name = err instanceof DOMException ? err.name : ''
+      if (name === 'NotAllowedError') {
+        this.fail(
+          'إذن الميكروفون مرفوض لهذا الموقع — فعّله من إعدادات الموقع في المتصفح (أيقونة القفل بجوار العنوان) ثم أعد المحاولة',
+        )
+      } else if (name === 'NotFoundError') {
+        this.fail('لم يُعثر على ميكروفون في هذا الجهاز')
+      } else {
+        this.fail('تعذر الوصول إلى الميكروفون — تأكد من منح الإذن للموقع ثم أعد المحاولة')
+      }
       return
     }
 
