@@ -344,6 +344,31 @@ def test_student_role_forbidden_on_sessions_endpoints(client, db_session):
     assert client.get("/api/sessions/active").status_code == 403
 
 
+def test_finalize_generates_waveform_from_real_audio_and_exposes_it_in_session_detail(
+    client, db_session, make_webm_audio
+):
+    teacher, student = _setup_teacher_with_student(db_session, teacher_username="waveform_teacher")
+    _login(client, "waveform_teacher", "Password123!")
+    session_id = _create_session(client, student.id).json()["id"]
+
+    audio = make_webm_audio(1.5)
+    last_index = _upload_segment(client, session_id, audio, segment=0, n=2)
+
+    finalize_resp = client.post(f"/api/sessions/{session_id}/finalize", json={"segments": {"0": last_index}})
+    assert finalize_resp.status_code == 200
+    waveform = finalize_resp.json()["recording"]["waveform"]
+    assert waveform is not None
+    assert 0 < len(waveform) <= 800
+    assert all(isinstance(v, int) and 0 <= v <= 100 for v in waveform)
+    # صوت جيبي (sine) بمطال ثابت تقريباً - يجب ألا تكون كل القمم صفراً
+    assert any(v > 0 for v in waveform)
+
+    detail_resp = client.get(f"/api/sessions/{session_id}")
+    assert detail_resp.status_code == 200
+    assert detail_resp.json()["recording"]["waveform"] == waveform
+    assert detail_resp.json()["recording"]["duration_ms"] is not None
+
+
 def test_audio_range_request_returns_206_with_correct_bytes(client, db_session, make_webm_audio):
     teacher, student = _setup_teacher_with_student(db_session, teacher_username="stream_teacher")
     _login(client, "stream_teacher", "Password123!")

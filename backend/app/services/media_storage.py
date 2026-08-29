@@ -18,6 +18,7 @@
 
 import re
 import shutil
+import struct
 import subprocess
 import uuid
 from collections.abc import Iterator
@@ -28,6 +29,10 @@ from app.core.config import settings
 SEG_CHUNK_RE = re.compile(r"^seg_(\d{3})_chunk_(\d{5})\.part$")
 STREAM_READ_SIZE = 1024 * 1024  # 1MB
 FFMPEG_TIMEOUT_SECONDS = 120
+
+WAVEFORM_BUCKET_COUNT = 800
+WAVEFORM_SAMPLE_RATE = 8000
+WAVEFORM_MAX_ABS_SAMPLE = 32768  # |أدنى قيمة int16| = 32768، نطبّع عليها
 
 
 class FfmpegError(RuntimeError):
@@ -218,6 +223,53 @@ def probe_duration_ms(path: Path) -> int | None:
     except ValueError:
         return None
     return round(seconds * 1000)
+
+
+def generate_waveform(path: Path) -> list[int]:
+    """يفكّ الملف الصوتي إلى PCM خام (mono، 16-bit، 8kHz) عبر ffmpeg/stdout،
+    ويقسّم العينات إلى 800 دلو متساوٍ (أقصر إن كانت العينات أقل من 800 -
+    بلا padding)، ويأخذ أقصى قيمة مطلقة لكل دلو مطبّعة إلى عدد صحيح 0..100.
+
+    يرفع ``FfmpegError`` عند فشل ffmpeg - المسؤول عن استدعاء هذه الدالة هو
+    من يقرر عدم إفشال finalize بسببها (تحذير + NULL)."""
+    result = _run_subprocess(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-i",
+            str(path),
+            "-f",
+            "s16le",
+            "-ac",
+            "1",
+            "-ar",
+            str(WAVEFORM_SAMPLE_RATE),
+            "-",
+        ],
+        error_label="ffmpeg (waveform)",
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", errors="replace")
+        raise FfmpegError(f"فشل توليد المخطط الموجي (rc={result.returncode})\n{stderr}")
+
+    raw = result.stdout
+    sample_count = len(raw) // 2
+    if sample_count == 0:
+        return []
+
+    samples = struct.unpack(f"<{sample_count}h", raw[: sample_count * 2])
+    bucket_count = min(WAVEFORM_BUCKET_COUNT, sample_count)
+
+    peaks: list[int] = []
+    for i in range(bucket_count):
+        start = i * sample_count // bucket_count
+        end = (i + 1) * sample_count // bucket_count
+        end = max(end, start + 1)
+        bucket_max = max(abs(s) for s in samples[start:end])
+        peaks.append(min(100, round(bucket_max * 100 / WAVEFORM_MAX_ABS_SAMPLE)))
+
+    return peaks
 
 
 def delete_session_media(session_id: uuid.UUID) -> None:

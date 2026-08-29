@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Integer, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -24,5 +24,8 @@ class Recording(Base):
     size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     # نسبي من MEDIA_ROOT (مثال: "recordings/{session_id}/recording.webm")
     file_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 800 قيمة (int 0..100) لقمم الموجة، أو أقل إن كان التسجيل أقصر من 800
+    # عينة دلو. NULL إن فشل التوليد (لا يفشل finalize بسبب ذلك).
+    waveform: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

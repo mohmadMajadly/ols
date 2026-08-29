@@ -359,6 +359,12 @@ def finalize_session(
     if duration_ms is None:
         duration_ms = payload.duration_ms
 
+    try:
+        waveform = media_storage.generate_waveform(final_path)
+    except media_storage.FfmpegError as exc:
+        logger.warning("فشل توليد المخطط الموجي للجلسة %s (سيُترك NULL): %s", session_id, exc)
+        waveform = None
+
     recording = db.query(Recording).filter(Recording.session_id == session_id).first()
     if recording is None:
         recording = Recording(session_id=session_id)
@@ -367,6 +373,7 @@ def finalize_session(
     recording.duration_ms = duration_ms
     recording.size_bytes = size_bytes
     recording.file_path = media_storage.recording_relative_path(session_id)
+    recording.waveform = waveform
     recording.finalized_at = datetime.now(timezone.utc)
 
     if payload.attendance is not None:

@@ -45,6 +45,7 @@ class RecordingOut(BaseModel):
     mime_type: str
     duration_ms: int | None
     size_bytes: int | None
+    waveform: list[int] | None = None
 
 
 class SessionListItemOut(BaseModel):
