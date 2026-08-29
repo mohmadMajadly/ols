@@ -2,7 +2,10 @@
 // Route غير محمي، ويُشرط ظهوره بـ import.meta.env.DEV في routes.tsx (لا يظهر في الإنتاج).
 
 import type { ReactNode } from 'react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+
+import { RecitationHalo } from './live/RecitationHalo'
+import { SPECTRUM_BANDS } from '../session/recorderEngine'
 
 import { AyahChip } from '../ui/AyahChip'
 import { Badge } from '../ui/Badge'
@@ -30,6 +33,41 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 const BADGE_VARIANTS: BadgeVariant[] = ['neutral', 'sahih', 'hifz', 'tajwid', 'dabt', 'waqf']
+
+// محاكاة طيف صوتي شبيه بإيقاع التلاوة (مقاطع نطق وسكتات) لمعاينة الهالة
+// في المعرض دون ميكروفون — تُغذّي spectrumRef بنفس عقد المحرك الحقيقي.
+function HaloDemo() {
+  const spectrumRef = useRef(new Float32Array(SPECTRUM_BANDS))
+  const [level, setLevel] = useState(0)
+  const [elapsed, setElapsed] = useState(272000)
+
+  useEffect(() => {
+    let raf = 0
+    const start = performance.now()
+    const tick = () => {
+      const t = (performance.now() - start) / 1000
+      // غلاف نطق: مقاطع ~0.5s تفصلها سكتات قصيرة، بشدة متموجة
+      const phrase = Math.max(0, Math.sin(t * 2.1)) * (0.55 + 0.45 * Math.sin(t * 0.37))
+      const bands = spectrumRef.current
+      for (let b = 0; b < bands.length; b++) {
+        const formant = Math.exp(-Math.pow((b - 6 - 4 * Math.sin(t * 1.3)) / 5, 2))
+        const shimmer = 0.5 + 0.5 * Math.sin(t * 9 + b * 1.7)
+        bands[b] = Math.min(1, phrase * (0.25 + formant * 0.9) * (0.6 + 0.4 * shimmer))
+      }
+      setLevel(phrase * 0.8)
+      setElapsed((e) => e + 16)
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  return (
+    <div className="flex items-center justify-center rounded-card bg-lazward-900 py-10">
+      <RecitationHalo elapsedMs={elapsed} level={level} spectrumRef={spectrumRef} />
+    </div>
+  )
+}
 
 export function UiGalleryPage() {
   const [modalOpen, setModalOpen] = useState(false)
@@ -201,6 +239,10 @@ export function UiGalleryPage() {
             <Spinner size={18} tone="nur" />
           </span>
         </div>
+      </Section>
+
+      <Section title="RecitationHalo — هالة التلاوة (محاكاة صوت)">
+        <HaloDemo />
       </Section>
     </div>
   )

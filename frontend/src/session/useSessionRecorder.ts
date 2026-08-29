@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { FinalizePayload, RecorderSnapshot } from './recorderEngine'
-import { RecorderEngine } from './recorderEngine'
+import { RecorderEngine, SPECTRUM_BANDS } from './recorderEngine'
 
 const IDLE_SNAPSHOT: RecorderSnapshot = {
   phase: 'idle',
@@ -29,6 +29,9 @@ export function useSessionRecorder() {
   const [snapshot, setSnapshot] = useState<RecorderSnapshot>(IDLE_SNAPSHOT)
   const [level, setLevel] = useState(0)
   const [elapsedMs, setElapsedMs] = useState(0)
+  // طيف الترددات يُحدَّث في المكان (20Hz) بلا setState — تقرؤه هالة التلاوة
+  // داخل حلقة رسمها الخاصة؛ إعادة رسم React بهذا المعدل هدر بلا داعٍ.
+  const spectrumRef = useRef<Float32Array>(new Float32Array(SPECTRUM_BANDS))
 
   // ساعة العرض — القيمة الحقيقية للملاحظات تُقرأ من getTimestampMs لحظة الضغط
   useEffect(() => {
@@ -50,7 +53,11 @@ export function useSessionRecorder() {
     const engine = new RecorderEngine(
       opts.sessionId,
       { segment: opts.segment, priorChunks: opts.priorChunks },
-      { onSnapshot: setSnapshot, onLevel: setLevel },
+      {
+        onSnapshot: setSnapshot,
+        onLevel: setLevel,
+        onSpectrum: (bands) => spectrumRef.current.set(bands),
+      },
     )
     if (opts.priorUploaded) engine.setPriorSegments(opts.priorUploaded)
     engineRef.current = engine
@@ -71,5 +78,5 @@ export function useSessionRecorder() {
     return engineRef.current?.getTimestampMs() ?? 0
   }, [])
 
-  return { snapshot, level, elapsedMs, start, finalize, cancel, captureTimestamp }
+  return { snapshot, level, elapsedMs, spectrumRef, start, finalize, cancel, captureTimestamp }
 }

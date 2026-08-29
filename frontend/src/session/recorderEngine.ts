@@ -16,7 +16,8 @@
 
 const CHUNK_MS = 5000
 const MAX_BACKOFF_MS = 15000
-const LEVEL_INTERVAL_MS = 100
+const LEVEL_INTERVAL_MS = 50 // 20Hz — يكفي للهالة الصوتية مع تنعيم في طرف الرسم
+export const SPECTRUM_BANDS = 28 // نطاقات طيف لوغاريتمية تقريباً لمدى صوت التلاوة
 
 export type RecorderPhase =
   | 'idle'
@@ -45,8 +46,14 @@ export interface FinalizePayload {
 
 interface EngineCallbacks {
   onSnapshot: (s: RecorderSnapshot) => void
-  /** مستوى الصوت 0..1 — بمعدل ~10 مرات/ثانية أثناء التسجيل */
+  /** مستوى الصوت 0..1 — بمعدل ~20 مرة/ثانية أثناء التسجيل */
   onLevel: (level: number) => void
+  /**
+   * طيف الترددات 0..1 لكل نطاق (SPECTRUM_BANDS نطاقاً، من ~80Hz إلى ~5kHz)
+   * لتغذية «هالة التلاوة» البصرية. المصفوفة يعاد استخدامها بين النداءات —
+   * انسخها إن احتجت الاحتفاظ بها.
+   */
+  onSpectrum?: (bands: Float32Array) => void
 }
 
 interface ChunkRef {
@@ -203,15 +210,40 @@ export class RecorderEngine {
       this.audioCtx = new AudioContext()
       const source = this.audioCtx.createMediaStreamSource(this.stream)
       const analyser = this.audioCtx.createAnalyser()
-      analyser.fftSize = 512
+      analyser.fftSize = 1024
+      analyser.smoothingTimeConstant = 0.5
       source.connect(analyser)
-      const buf = new Float32Array(analyser.fftSize)
+      const timeBuf = new Float32Array(analyser.fftSize)
+      const freqBuf = new Uint8Array(analyser.frequencyBinCount)
+      const bands = new Float32Array(SPECTRUM_BANDS)
+      // حدود نطاقات شبه لوغاريتمية فوق مدى صوت التلاوة (~80Hz–5kHz)
+      const sampleRate = this.audioCtx.sampleRate
+      const binHz = sampleRate / analyser.fftSize
+      const loBin = Math.max(1, Math.floor(80 / binHz))
+      const hiBin = Math.min(analyser.frequencyBinCount - 1, Math.ceil(5000 / binHz))
+      const edges: number[] = []
+      for (let b = 0; b <= SPECTRUM_BANDS; b++) {
+        edges.push(Math.round(loBin * Math.pow(hiBin / loBin, b / SPECTRUM_BANDS)))
+      }
+
       this.levelTimer = window.setInterval(() => {
-        analyser.getFloatTimeDomainData(buf)
+        analyser.getFloatTimeDomainData(timeBuf)
         let sum = 0
-        for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i]
+        for (let i = 0; i < timeBuf.length; i++) sum += timeBuf[i] * timeBuf[i]
         // تكبير الـ RMS لمدى مريح بصرياً (كلام عادي ~0.05 RMS)
-        this.callbacks.onLevel(Math.min(1, Math.sqrt(sum / buf.length) * 6))
+        this.callbacks.onLevel(Math.min(1, Math.sqrt(sum / timeBuf.length) * 6))
+
+        if (this.callbacks.onSpectrum) {
+          analyser.getByteFrequencyData(freqBuf)
+          for (let b = 0; b < SPECTRUM_BANDS; b++) {
+            const from = edges[b]
+            const to = Math.max(from + 1, edges[b + 1])
+            let acc = 0
+            for (let i = from; i < to; i++) acc += freqBuf[i]
+            bands[b] = acc / ((to - from) * 255)
+          }
+          this.callbacks.onSpectrum(bands)
+        }
       }, LEVEL_INTERVAL_MS)
     } catch {
       // المقياس تحسين بصري فقط — فشله لا يمس التسجيل
