@@ -1,8 +1,8 @@
-﻿// Ù„ÙˆØ­Ø© Ø§Ù„Ù…ØµØ­Ù Ø¯Ø§Ø®Ù„ Ø´Ø§Ø´Ø© Ø§Ù„Ø¬Ù„Ø³Ø© Ø§Ù„Ø­ÙŠØ© (WP9b Â§3). ÙŠØ³ØªØ¶ÙŠÙÙ‡Ø§ LiveSessionPage Ø¥Ù…Ø§ ÙƒØ¹Ù…ÙˆØ¯ Ø¬Ø§Ù†Ø¨ÙŠ
-// (Ø´Ø§Ø´Ø§Øª ÙˆØ§Ø³Ø¹Ø©) Ø£Ùˆ ØªÙ…Ø¯Ù‘Ø¯Ø§Ù‹ ÙÙˆÙ‚ Ù…Ù†Ø·Ù‚Ø© Ø£Ø²Ø±Ø§Ø± Ø§Ù„Ù…Ù„Ø§Ø­Ø¸Ø§Øª (Ù…ÙˆØ¨Ø§ÙŠÙ„) â€” Ø§Ù„Ù…ÙˆØ¶Ø¹ Ø§Ù„ÙØ¹Ù„ÙŠ Ù…Ù† Ù…Ø³Ø¤ÙˆÙ„ÙŠØ©
-// Ø§Ù„Ù…Ø³ØªØ¶ÙŠÙØ› Ù‡Ø°Ø§ Ø§Ù„Ù…ÙƒÙˆÙ‘Ù† Ù†ÙØ³Ù‡ Ù„Ø§ ÙŠÙØªØ±Ø¶ Ø´ÙŠØ¦Ø§Ù‹ Ø¹Ù† Ø­Ø§ÙˆÙŠØªÙ‡. ØªÙÙ‡ÙŠÙŽÙ‘Ø£ Ù…Ù† ØµÙØ­Ø© Ø¨Ø¯Ø§ÙŠØ© Ù†Ø·Ø§Ù‚ Ø§Ù„Ø¬Ù„Ø³Ø©
-// (page-for) Ø¥Ù† ÙˆÙØ¬Ø¯ Ù†Ø·Ø§Ù‚ØŒ ÙˆØ¥Ù„Ø§ Ø¢Ø®Ø± ØµÙØ­Ø© ØªØµÙÙ‘Ø­Ù‡Ø§ Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… Ø¹Ù„Ù‰ Ù‡Ø°Ø§ Ø§Ù„Ø¬Ù‡Ø§Ø² â€” ØªÙØ´Ø§Ø±Ùƒ Ù†ÙØ³ Ù…ÙØªØ§Ø­
-// localStorage Ù…Ø¹ ØµÙØ­Ø© /mushaf Ø§Ù„Ù…Ø³ØªÙ‚Ù„Ø©.
+// لوحة المصحف داخل شاشة الجلسة الحية (WP9b §3). يستضيفها LiveSessionPage إما كعمود جانبي
+// (شاشات واسعة) أو تمدّداً فوق منطقة أزرار الملاحظات (موبايل) — الموضع الفعلي من مسؤولية
+// المستضيف؛ هذا المكوّن نفسه لا يفترض شيئاً عن حاويته. تُهيَّأ من صفحة بداية نطاق الجلسة
+// (page-for) إن وُجد نطاق، وإلا آخر صفحة تصفّحها المستخدم على هذا الجهاز — تُشارك نفس مفتاح
+// localStorage مع صفحة /mushaf المستقلة.
 
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
@@ -18,7 +18,7 @@ export interface MushafPanelProps {
   rangeStartSurah: number | null
   rangeStartAyah: number | null
   onClose: () => void
-  /** ÙŠÙØ¨Ù„ÙŽÙ‘Øº Ø¨Ù…Ù‚Ø¨Ø¶ Ø§Ù„ØªØ­ÙƒÙ… Ø¨Ø¹Ø¯ Ø¬Ø§Ù‡Ø²ÙŠØªÙ‡ â€” Ù†Ù‚Ø·Ø© Ø§Ù„Ø±Ø¨Ø· Ø§Ù„Ø¬Ø§Ù‡Ø²Ø© Ù„Ø®Ø¯Ù…Ø© Ø§Ù„ØªØªØ¨Ø¹ Ø§Ù„ØµÙˆØªÙŠ (WP9c). */
+  /** يُبلَّغ بمقبض التحكم بعد جاهزيته — نقطة الربط الجاهزة لخدمة التتبع الصوتي (WP9c). */
   onControlReady?: (handle: MushafControlHandle) => void
   className?: string
 }
@@ -43,7 +43,7 @@ export function MushafPanel({ rangeStartSurah, rangeStartAyah, onClose, onContro
         resolvedRef.current = true
         setStartPage(pageForQuery.data.page)
       } else if (pageForQuery.isError) {
-        // ØªØ¹Ø°Ù‘Ø± ØªØ­Ø¯ÙŠØ¯ ØµÙØ­Ø© Ø§Ù„Ù†Ø·Ø§Ù‚ (Ù†Ø§Ø¯Ø±) â€” Ù†ØªØ±Ø§Ø¬Ø¹ Ù„Ø¢Ø®Ø± ØµÙØ­Ø© Ù…ØªØµÙÙŽÙ‘Ø­Ø© Ø¨Ø¯Ù„ ØªØ¹Ø·ÙŠÙ„ Ø§Ù„Ù„ÙˆØ­Ø© ÙƒÙ„ÙŠØ§Ù‹.
+        // تعذّر تحديد صفحة النطاق (نادر) — نتراجع لآخر صفحة متصفَّحة بدل تعطيل اللوحة كلياً.
         resolvedRef.current = true
         setStartPage(getLastMushafPage())
       }
@@ -73,7 +73,7 @@ export function MushafPanel({ rangeStartSurah, rangeStartAyah, onClose, onContro
           <button
             type="button"
             onClick={() => controlRef.current?.goToPage(controlRef.current.getPage() - 1)}
-            aria-label="Ø§Ù„ØµÙØ­Ø© Ø§Ù„Ø³Ø§Ø¨Ù‚Ø©"
+            aria-label="الصفحة السابقة"
             className="flex h-8 w-8 items-center justify-center rounded-control text-hibr-2 hover:bg-lazward-100/40 hover:text-hibr"
           >
             <IconChevronRight className="h-4 w-4" />
@@ -81,17 +81,17 @@ export function MushafPanel({ rangeStartSurah, rangeStartAyah, onClose, onContro
           <button
             type="button"
             onClick={() => controlRef.current?.goToPage(controlRef.current.getPage() + 1)}
-            aria-label="Ø§Ù„ØµÙØ­Ø© Ø§Ù„ØªØ§Ù„ÙŠØ©"
+            aria-label="الصفحة التالية"
             className="flex h-8 w-8 items-center justify-center rounded-control text-hibr-2 hover:bg-lazward-100/40 hover:text-hibr"
           >
             <IconChevronLeft className="h-4 w-4" />
           </button>
         </div>
-        <span className="text-sm font-medium text-hibr">Ø§Ù„Ù…ØµØ­Ù</span>
+        <span className="text-sm font-medium text-hibr">المصحف</span>
         <button
           type="button"
           onClick={onClose}
-          aria-label="Ø¥ØºÙ„Ø§Ù‚ Ø§Ù„Ù…ØµØ­Ù"
+          aria-label="إغلاق المصحف"
           className="flex h-8 w-8 items-center justify-center rounded-control text-hibr-3 hover:bg-lazward-100/40 hover:text-hibr"
         >
           <IconClose className="h-4 w-4" />
@@ -106,4 +106,3 @@ export function MushafPanel({ rangeStartSurah, rangeStartAyah, onClose, onContro
     </div>
   )
 }
-
