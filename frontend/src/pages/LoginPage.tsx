@@ -1,9 +1,15 @@
+// صفحة تسجيل الدخول بالهوية البصرية النهائية — بلا صور وبلا زخرفة، الرقي في دقة
+// المسافات والتباعد الطفيف بين أحرف العنوان.
+
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { Button } from '../ui/Button'
+import { PasswordField } from '../ui/PasswordField'
+import { TextField } from '../ui/TextField'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -33,59 +39,46 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
-      >
-        <h1 className="mb-6 text-center text-xl font-semibold text-gray-800">
-          تسجيل الدخول إلى OLS
-        </h1>
+    <main className="flex min-h-screen items-center justify-center bg-waraq p-4">
+      <div className="w-full max-w-[400px] rounded-card border border-khatt bg-waraq-raised p-8">
+        <div className="mb-8 text-center">
+          <h1 className="font-display text-3xl tracking-wide text-lazward-700">OLS</h1>
+          <p className="mt-1.5 text-sm text-hibr-2">منصة إدارة التسميع</p>
+        </div>
 
-        <div className="mb-4">
-          <label htmlFor="username" className="mb-1 block text-sm text-gray-700">
-            اسم المستخدم
-          </label>
-          <input
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+          <TextField
+            label="اسم المستخدم"
             id="username"
+            name="username"
             type="text"
             autoComplete="username"
             required
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+            onChange={(event) => setUsername(event.target.value)}
           />
-        </div>
 
-        <div className="mb-4">
-          <label htmlFor="password" className="mb-1 block text-sm text-gray-700">
-            كلمة المرور
-          </label>
-          <input
+          <PasswordField
+            label="كلمة المرور"
             id="password"
-            type="password"
+            name="password"
             autoComplete="current-password"
             required
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+            onChange={(event) => setPassword(event.target.value)}
           />
-        </div>
 
-        {error && (
-          <p className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
-            {error}
-          </p>
-        )}
+          {error && (
+            <p role="alert" className="rounded-control bg-khata-hifz/10 px-3 py-2 text-sm text-khata-hifz">
+              {error}
+            </p>
+          )}
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full rounded bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
-        >
-          {isSubmitting ? 'جارٍ الدخول...' : 'دخول'}
-        </button>
-      </form>
+          <Button type="submit" loading={isSubmitting} className="mt-1 w-full">
+            دخول
+          </Button>
+        </form>
+      </div>
     </main>
   )
 }
