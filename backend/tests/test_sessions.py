@@ -336,12 +336,27 @@ def test_chunk_over_max_size_rejected_with_413(client, db_session):
     assert resp.status_code == 413
 
 
-def test_student_role_forbidden_on_sessions_endpoints(client, db_session):
+def test_student_role_forbidden_on_sessions_mutation_endpoints(client, db_session):
+    """WP8: GET /api/sessions أصبح مسموحاً للطالب (مفلتراً على جلساته هو — انظر
+    test_student_portal.py) لكن كل مسارات الكتابة والحالة النشطة تبقى ممنوعة."""
+    teacher, student = _setup_teacher_with_student(db_session, teacher_username="sess_forbid_teacher")
+    _login(client, "sess_forbid_teacher", "Password123!")
+    session_id = _create_session(client, student.id).json()["id"]
+
     _create_user(db_session, username="sess_student", password="Password123!", role=UserRole.student)
     _login(client, "sess_student", "Password123!")
 
-    assert client.get("/api/sessions").status_code == 403
+    # طالب بلا سجل مربوط: قائمة فارغة، لا 403 ولا تسريب.
+    list_resp = client.get("/api/sessions")
+    assert list_resp.status_code == 200
+    assert list_resp.json() == []
+
     assert client.get("/api/sessions/active").status_code == 403
+    assert _create_session(client, student.id).status_code == 403
+    assert client.patch(f"/api/sessions/{session_id}", json={"summary": "محاولة"}).status_code == 403
+    assert client.post(f"/api/sessions/{session_id}/cancel").status_code == 403
+    assert client.put(f"/api/sessions/{session_id}/chunks/0", content=b"x").status_code == 403
+    assert client.post(f"/api/sessions/{session_id}/finalize", json={"segments": {"0": 0}}).status_code == 403
 
 
 def test_finalize_generates_waveform_from_real_audio_and_exposes_it_in_session_detail(

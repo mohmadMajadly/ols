@@ -14,6 +14,10 @@ export interface Student {
   memorization_note: string | null
   is_active: boolean
   created_at: string
+  /** اسم مستخدم حساب دخول الطالب المربوط إن وُجد (WP8) — null إن لم يُنشأ بعد. */
+  account_username: string | null
+  /** حالة تفعيل الحساب المربوط — null إن لم يوجد حساب. */
+  account_is_active: boolean | null
 }
 
 export interface StudentCreateInput {
@@ -60,6 +64,27 @@ export function createStudent(payload: StudentCreateInput): Promise<Student> {
 
 export function updateStudent(id: string, payload: StudentUpdateInput): Promise<Student> {
   return apiClient.patch<Student>(`/students/${id}`, payload)
+}
+
+// ---- حساب دخول الطالب — POST /students/{id}/account (WP8) ----
+
+export interface StudentAccountCreateInput {
+  username: string
+  password: string
+}
+
+export function createStudentAccount(id: string, payload: StudentAccountCreateInput): Promise<Student> {
+  return apiClient.post<Student>(`/students/${id}/account`, payload)
+}
+
+// ---- بوابة الطالب — GET /students/me و/students/me/stats (WP8) ----
+
+export function fetchMyStudent(): Promise<Student> {
+  return apiClient.get<Student>('/students/me')
+}
+
+export function fetchMyStudentStats(): Promise<StudentStats> {
+  return apiClient.get<StudentStats>('/students/me/stats')
 }
 
 // ---- إحصائيات الطالب — GET /students/{id}/stats ----

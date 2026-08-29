@@ -36,6 +36,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["sessions"])
 
 _staff_roles = (UserRole.admin, UserRole.supervisor, UserRole.teacher)
+# مسارات القراءة فقط (list/detail/audio) مسموحة للطالب أيضاً، مفلترة على جلساته هو —
+# باقي المسارات (إنشاء/تعديل/chunks/finalize/cancel) تبقى للطاقم فقط.
+_read_roles = (*_staff_roles, UserRole.student)
 
 MAX_CHUNK_SIZE = 10 * 1024 * 1024  # 10MB
 
@@ -219,7 +222,7 @@ def list_sessions(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*_staff_roles)),
+    current_user: User = Depends(require_roles(*_read_roles)),
 ) -> list[SessionListItemOut]:
     notes_count_subq = (
         db.query(Note.session_id, func.count(Note.id).label("notes_count"))
@@ -234,6 +237,11 @@ def list_sessions(
 
     if current_user.role == UserRole.teacher:
         query = query.filter(TasmeeSession.teacher_id == current_user.id)
+    elif current_user.role == UserRole.student:
+        own_student = db.query(Student).filter(Student.user_id == current_user.id).first()
+        if own_student is None:
+            return []
+        query = query.filter(TasmeeSession.student_id == own_student.id)
     if student_id is not None:
         query = query.filter(TasmeeSession.student_id == student_id)
     if group_id is not None:
@@ -274,7 +282,7 @@ def list_sessions(
 def get_session(
     session_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*_staff_roles)),
+    current_user: User = Depends(require_roles(*_read_roles)),
 ) -> SessionDetailOut:
     session = get_visible_session_or_404(db, session_id, current_user)
     return _session_detail(db, session)
@@ -471,7 +479,7 @@ def stream_audio(
     session_id: uuid.UUID,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*_staff_roles)),
+    current_user: User = Depends(require_roles(*_read_roles)),
 ) -> StreamingResponse:
     session = get_visible_session_or_404(db, session_id, current_user)
     recording = db.query(Recording).filter(Recording.session_id == session_id).first()

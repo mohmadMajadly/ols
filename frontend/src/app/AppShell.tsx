@@ -25,13 +25,22 @@ const NAV_ITEMS: Array<{ to: string; label: string; icon: typeof IconDashboard; 
   { to: '/groups', label: 'الحلقات', icon: IconCircles, end: false },
   { to: '/sessions', label: 'الجلسات', icon: IconSessions, end: false },
   { to: '/users', label: 'المستخدمون', icon: IconUser, end: false, roles: ['admin'] },
-  { to: '/settings', label: 'الإعدادات', icon: IconSettings, end: false, roles: ['admin', 'supervisor', 'student'] },
+  { to: '/settings', label: 'الإعدادات', icon: IconSettings, end: false, roles: ['admin', 'supervisor'] },
+]
+
+// بوابة الطالب (WP8): بندان فقط — «صفحتي» هنا و«تسجيل الخروج» أسفل الشريط (لا لوحة
+// تحكم، لا طلاب، لا إعدادات).
+const STUDENT_NAV_ITEMS: Array<{ to: string; label: string; icon: typeof IconDashboard; end: boolean }> = [
+  { to: '/me', label: 'صفحتي', icon: IconUser, end: true },
 ]
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const visibleItems = NAV_ITEMS.filter((item) => !item.roles || (user && item.roles.includes(user.role)))
+  const isStudent = user?.role === 'student'
+  const visibleItems = isStudent
+    ? STUDENT_NAV_ITEMS
+    : NAV_ITEMS.filter((item) => !item.roles || (user && item.roles.includes(user.role)))
 
   async function handleLogout() {
     await logout()

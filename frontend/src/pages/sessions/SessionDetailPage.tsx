@@ -44,7 +44,12 @@ const STATUS_BADGE: Record<string, BadgeVariant> = { recording: 'lazward', compl
 
 const HIGHLIGHT_MS = 1600
 
-export function SessionDetailPage() {
+export interface SessionDetailPageProps {
+  /** بوابة الطالب (WP8، /me/sessions/:id): بلا أي زر تعديل/حذف — قراءة فقط بالكامل. */
+  readOnly?: boolean
+}
+
+export function SessionDetailPage({ readOnly = false }: SessionDetailPageProps) {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -55,7 +60,10 @@ export function SessionDetailPage() {
     queryFn: () => fetchSession(id as string),
     enabled: Boolean(id),
   })
-  const taxonomyQuery = useQuery({ queryKey: ['taxonomy'], queryFn: fetchTaxonomy })
+  // /api/taxonomy ممنوع على دور student (WP8 — يبقى 403 عمداً، لا استثناء أمني هنا)،
+  // فلا تُطلب في بوابة الطالب: الملاحظات تُعرض حينها بلا شارة/لون تصنيف (تدهور رشيق
+  // موثّق في تقرير WP8) بدل إطلاق طلب مرفوض دوماً.
+  const taxonomyQuery = useQuery({ queryKey: ['taxonomy'], queryFn: fetchTaxonomy, enabled: !readOnly })
   const surahsQuery = useQuery({ queryKey: ['quran', 'surahs'], queryFn: fetchSurahs, staleTime: Infinity })
 
   const categoryById = new Map((taxonomyQuery.data?.categories ?? []).map((c) => [c.id, c] as const))
@@ -193,9 +201,15 @@ export function SessionDetailPage() {
         title={session.student_name}
         description={`${sessionTypeLabels[session.session_type]} — ${formatDualDate(session.started_at)}`}
         actions={
-          <Button variant="secondary" onClick={() => navigate(`/students/${session.student_id}`)}>
-            ملف الطالب
-          </Button>
+          readOnly ? (
+            <Button variant="secondary" onClick={() => navigate('/me')}>
+              صفحتي
+            </Button>
+          ) : (
+            <Button variant="secondary" onClick={() => navigate(`/students/${session.student_id}`)}>
+              ملف الطالب
+            </Button>
+          )
         }
       />
 
@@ -249,7 +263,7 @@ export function SessionDetailPage() {
         <Card>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-hibr">بطاقة التقييم</h2>
-            {session.status === 'completed' && (
+            {!readOnly && session.status === 'completed' && (
               <Button size="sm" variant="ghost" onClick={() => setGradeModalOpen(true)}>
                 تعديل
               </Button>
@@ -323,14 +337,16 @@ export function SessionDetailPage() {
                   {note.surah != null && note.ayah != null && (
                     <AyahChip surah={surahLabel(surahNames, note.surah)} ayah={note.ayah} />
                   )}
-                  <div className="ms-auto flex items-center gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => setEditingNoteId(note.id)}>
-                      تعديل
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setDeletingNoteId(note.id)}>
-                      حذف
-                    </Button>
-                  </div>
+                  {!readOnly && (
+                    <div className="ms-auto flex items-center gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => setEditingNoteId(note.id)}>
+                        تعديل
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setDeletingNoteId(note.id)}>
+                        حذف
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 {note.text && <p className="text-sm text-hibr">{note.text}</p>}
                 {extraEntries.length > 0 && (

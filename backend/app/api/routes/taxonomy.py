@@ -46,7 +46,11 @@ def _category_out(db: Session, category: NoteCategory, *, only_active_subtypes: 
 def get_taxonomy(
     include_inactive: bool = Query(default=False),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*_staff_roles)),
+    # القراءة متاحة للطالب أيضاً (بوابته تعرض أسماء وألوان تصنيفات ملاحظاته)؛
+    # include_inactive يبقى محصوراً بالمدير/المشرف عبر show_all أدناه
+    current_user: User = Depends(
+        require_roles(UserRole.admin, UserRole.supervisor, UserRole.teacher, UserRole.student)
+    ),
 ) -> TaxonomyOut:
     # صفحة الإعدادات تحتاج رؤية المعطَّل لإعادة تفعيله؛ يُسمح بذلك
     # للمدير والمشرف فقط — شاشة الجلسة تبقى على النشط حصراً.

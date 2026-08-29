@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_roles
 from app.core.quran_meta import SURAH_AYAH_COUNTS
+from app.core.security import hash_password
 from app.models.group import Group
 from app.models.note import Note
 from app.models.note_taxonomy import NoteCategory, NoteSubtype
@@ -21,12 +22,13 @@ from app.schemas.stats import (
     StudentTotalsOut,
     SubtypeCountOut,
 )
-from app.schemas.student import StudentCreate, StudentOut, StudentUpdate
+from app.schemas.student import StudentAccountCreate, StudentCreate, StudentOut, StudentUpdate
 from app.services.grading import DEDUCTION_BUCKETS
 
 router = APIRouter(prefix="/api/students", tags=["students"])
 
 _staff_roles = (UserRole.admin, UserRole.supervisor, UserRole.teacher)
+_account_manager_roles = (UserRole.admin, UserRole.supervisor)
 
 
 def _teacher_group_ids(db: Session, teacher_id: uuid.UUID) -> list[uuid.UUID]:
@@ -55,6 +57,45 @@ def _get_visible_student_or_404(db: Session, student_id: uuid.UUID, current_user
     return student
 
 
+def _get_own_student_or_404(db: Session, current_user: User) -> Student:
+    """يُستخدم في مسارات /me — يجلب سجل الطالب المربوط بحساب المستخدم الحالي."""
+    student = db.query(Student).filter(Student.user_id == current_user.id).first()
+    if student is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="لا يوجد سجل طالب مربوط بهذا الحساب"
+        )
+    return student
+
+
+def _account_fields(db: Session, student: Student) -> tuple[str | None, bool | None]:
+    if student.user_id is None:
+        return None, None
+    user = db.get(User, student.user_id)
+    if user is None:
+        return None, None
+    return user.username, user.is_active
+
+
+def _student_out(
+    student: Student, account_username: str | None, account_is_active: bool | None = None
+) -> StudentOut:
+    return StudentOut(
+        id=student.id,
+        full_name=student.full_name,
+        group_id=student.group_id,
+        user_id=student.user_id,
+        phone=student.phone,
+        guardian_phone=student.guardian_phone,
+        birth_year=student.birth_year,
+        joined_at=student.joined_at,
+        memorization_note=student.memorization_note,
+        is_active=student.is_active,
+        created_at=student.created_at,
+        account_username=account_username,
+        account_is_active=account_is_active,
+    )
+
+
 @router.get("", response_model=list[StudentOut])
 def list_students(
     group_id: uuid.UUID | None = Query(default=None),
@@ -62,8 +103,8 @@ def list_students(
     include_inactive: bool = Query(default=False),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*_staff_roles)),
-) -> list[Student]:
-    query = db.query(Student)
+) -> list[StudentOut]:
+    query = db.query(Student, User.username, User.is_active).outerjoin(User, User.id == Student.user_id)
     if not include_inactive:
         query = query.filter(Student.is_active.is_(True))
     if current_user.role == UserRole.teacher:
@@ -72,7 +113,8 @@ def list_students(
         query = query.filter(Student.group_id == group_id)
     if q:
         query = query.filter(Student.full_name.ilike(f"%{q}%"))
-    return query.order_by(Student.full_name).all()
+    rows = query.order_by(Student.full_name).all()
+    return [_student_out(student, username, account_active) for student, username, account_active in rows]
 
 
 @router.post("", response_model=StudentOut, status_code=status.HTTP_201_CREATED)
@@ -80,7 +122,7 @@ def create_student(
     payload: StudentCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*_staff_roles)),
-) -> Student:
+) -> StudentOut:
     if payload.group_id is not None:
         group = db.get(Group, payload.group_id)
         if group is None:
@@ -99,7 +141,57 @@ def create_student(
     db.add(student)
     db.commit()
     db.refresh(student)
-    return student
+    return _student_out(student, None)
+
+
+@router.get("/me", response_model=StudentOut)
+def get_my_student(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.student)),
+) -> StudentOut:
+    student = _get_own_student_or_404(db, current_user)
+    return _student_out(student, current_user.username, current_user.is_active)
+
+
+@router.get("/me/stats", response_model=StudentStatsOut)
+def get_my_student_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.student)),
+) -> StudentStatsOut:
+    student = _get_own_student_or_404(db, current_user)
+    return _compute_student_stats(db, student.id)
+
+
+@router.post("/{student_id}/account", response_model=StudentOut, status_code=status.HTTP_201_CREATED)
+def create_student_account(
+    student_id: uuid.UUID,
+    payload: StudentAccountCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*_account_manager_roles)),
+) -> StudentOut:
+    """ينشئ حساب دخول (دور student) ويربطه بسجل الطالب. الاسم الكامل للحساب = اسم الطالب."""
+    student = _get_visible_student_or_404(db, student_id, current_user)
+    if student.user_id is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="الطالب مربوط بحساب دخول بالفعل")
+
+    username = payload.username.strip().lower()
+    existing = db.query(User).filter(User.username == username).first()
+    if existing is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="اسم المستخدم مستخدم بالفعل")
+
+    user = User(
+        username=username,
+        password_hash=hash_password(payload.password),
+        full_name=student.full_name,
+        role=UserRole.student,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+    student.user_id = user.id
+    db.commit()
+    db.refresh(student)
+    return _student_out(student, user.username, user.is_active)
 
 
 @router.get("/{student_id}", response_model=StudentOut)
@@ -107,8 +199,9 @@ def get_student(
     student_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*_staff_roles)),
-) -> Student:
-    return _get_visible_student_or_404(db, student_id, current_user)
+) -> StudentOut:
+    student = _get_visible_student_or_404(db, student_id, current_user)
+    return _student_out(student, *_account_fields(db, student))
 
 
 @router.patch("/{student_id}", response_model=StudentOut)
@@ -117,7 +210,7 @@ def update_student(
     payload: StudentUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*_staff_roles)),
-) -> Student:
+) -> StudentOut:
     student = _get_visible_student_or_404(db, student_id, current_user)
 
     if payload.group_id is not None and payload.group_id != student.group_id:
@@ -142,7 +235,7 @@ def update_student(
 
     db.commit()
     db.refresh(student)
-    return student
+    return _student_out(student, *_account_fields(db, student))
 
 
 @router.get("/{student_id}/stats", response_model=StudentStatsOut)
@@ -154,7 +247,11 @@ def get_student_stats(
     """إحصائيات طالب واحد. الجلسات المحسوبة completed فقط في كل الحقول
     (بما فيها جلسات الغياب، التي تُنشأ completed مباشرة) ما لم يُذكر غير ذلك."""
     _get_visible_student_or_404(db, student_id, current_user)
+    return _compute_student_stats(db, student_id)
 
+
+def _compute_student_stats(db: Session, student_id: uuid.UUID) -> StudentStatsOut:
+    """منطق إحصائيات الطالب المشترك بين /students/{id}/stats و/students/me/stats."""
     completed = (TasmeeSession.student_id == student_id, TasmeeSession.status == "completed")
 
     sessions_count, avg_grade, attended_count = (

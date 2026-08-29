@@ -115,12 +115,19 @@ def test_teacher_can_read_but_not_modify_taxonomy(client, db_session):
     assert create_response.status_code == 403
 
 
-def test_student_forbidden_from_taxonomy(client, db_session):
+def test_student_can_read_but_not_write_taxonomy(client, db_session):
+    # منذ WP8: القراءة متاحة للطالب (بوابته تعرض تصنيفات ملاحظاته)، الكتابة ممنوعة
     _create_user(db_session, username="tax_student", password="Password123!", role=UserRole.student)
     _login(client, "tax_student", "Password123!")
 
-    response = client.get("/api/taxonomy")
-    assert response.status_code == 403
+    read_response = client.get("/api/taxonomy")
+    assert read_response.status_code == 200
+
+    create_response = client.post(
+        "/api/taxonomy/categories",
+        json={"name": "فئة ممنوعة", "color": "neutral"},
+    )
+    assert create_response.status_code == 403
 
 
 def test_include_inactive_shows_deactivated_category_to_admin(client):

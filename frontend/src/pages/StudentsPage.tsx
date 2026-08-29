@@ -28,6 +28,7 @@ import {
 } from '../ui/Table'
 import { TextField } from '../ui/TextField'
 import { IconPlus } from '../ui/icons'
+import { StudentAccountActions } from './StudentAccountActions'
 import { StudentFormModal } from './StudentFormModal'
 
 const PAGE_SIZE = 50
@@ -38,6 +39,7 @@ export function StudentsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   const isTeacher = user?.role === 'teacher'
+  const isAccountManager = user?.role === 'admin' || user?.role === 'supervisor'
 
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebouncedValue(search, 300)
@@ -157,13 +159,14 @@ export function StudentsPage() {
                 <TableHeaderCell>سنة الميلاد</TableHeaderCell>
                 <TableHeaderCell>الحالة</TableHeaderCell>
                 <TableHeaderCell>تاريخ الالتحاق</TableHeaderCell>
+                {isAccountManager && <TableHeaderCell>حساب الدخول</TableHeaderCell>}
                 <TableHeaderCell><span className="sr-only">إجراءات</span></TableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {pageStudents.length === 0 ? (
                 <TableEmptyRow
-                  colSpan={7}
+                  colSpan={isAccountManager ? 8 : 7}
                   message="لا طلاب بعد — أضف أول طالب"
                   action={<Button size="sm" onClick={openCreateModal}>إضافة طالب</Button>}
                 />
@@ -190,6 +193,11 @@ export function StudentsPage() {
                     <TableCell className="whitespace-nowrap text-sm text-hibr-2">
                       {formatDualDate(student.joined_at)}
                     </TableCell>
+                    {isAccountManager && (
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <StudentAccountActions student={student} variant="compact" />
+                      </TableCell>
+                    )}
                     <TableCell>
                       <Button size="sm" variant="ghost" onClick={() => openEditModal(student)}>
                         تعديل

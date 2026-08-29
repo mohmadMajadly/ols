@@ -18,6 +18,9 @@ class StudentOut(BaseModel):
     memorization_note: str | None
     is_active: bool
     created_at: datetime
+    # بيانات حساب الدخول المربوط إن وُجد (من join مع users) — بلا أي حقول حساسة.
+    account_username: str | None = None
+    account_is_active: bool | None = None
 
 
 class StudentCreate(BaseModel):
@@ -37,3 +40,10 @@ class StudentUpdate(BaseModel):
     birth_year: int | None = None
     memorization_note: str | None = None
     is_active: bool | None = None
+
+
+class StudentAccountCreate(BaseModel):
+    """POST /api/students/{id}/account — إنشاء حساب دخول للطالب وربطه."""
+
+    username: str = Field(min_length=3, max_length=50)
+    password: str = Field(min_length=8)

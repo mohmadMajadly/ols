@@ -229,6 +229,24 @@ export function IconSkipForward(props: IconProps) {
   )
 }
 
+export function IconCopy(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="8.5" y="8.5" width="11.5" height="11.5" rx="1.5" />
+      <path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H5.5A1.5 1.5 0 0 0 4 6v8.5a1.5 1.5 0 0 0 1.5 1.5H8" />
+    </svg>
+  )
+}
+
+export function IconRefresh(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4.5 12a7.5 7.5 0 0 1 12.68-5.42M19.5 12a7.5 7.5 0 0 1-12.68 5.42" />
+      <path d="M17.2 4.9v3.8h-3.8M6.8 19.1v-3.8h3.8" />
+    </svg>
+  )
+}
+
 export function IconLogout(props: IconProps) {
   return (
     <svg {...base} {...props}>
