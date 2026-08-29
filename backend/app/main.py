@@ -11,6 +11,7 @@ from app.api.routes import (
     dashboard,
     groups,
     health,
+    mushaf,
     notes,
     quran,
     rubric,
@@ -59,6 +60,7 @@ def create_app() -> FastAPI:
     application.include_router(taxonomy.router)
     application.include_router(rubric.router)
     application.include_router(quran.router)
+    application.include_router(mushaf.router)
     application.include_router(sessions.router)
     application.include_router(notes.router)
     application.include_router(dashboard.router)

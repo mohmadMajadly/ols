@@ -5,6 +5,7 @@ import { AppShell } from './app/AppShell'
 import type { UserRole } from './auth/AuthContext'
 import { useAuth } from './auth/AuthContext'
 import { DashboardPage } from './pages/DashboardPage'
+import { DevMushafPage } from './pages/DevMushafPage'
 import { GroupsPage } from './pages/GroupsPage'
 import { LiveSessionPage } from './pages/live/LiveSessionPage'
 import LoginPage from './pages/LoginPage'
@@ -60,6 +61,7 @@ export default function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
 
       {import.meta.env.DEV && <Route path="/dev/ui" element={<UiGalleryPage />} />}
+      {import.meta.env.DEV && <Route path="/dev/mushaf/:page" element={<DevMushafPage />} />}
 
       {/* شاشة الجلسة الحية: ملء الشاشة بلا AppShell — خارج عالم الورق عمداً. للطاقم فقط. */}
       <Route

@@ -21,3 +21,9 @@ media/
 # misc
 .DS_Store
 *.log
+
+# WP9a — خطوط QPC V2 المُجلَبة (604 خط صفحة + خط Uthmanic Hafs عام، عشرات
+# الميغابايتات): scripts/fetch-mushaf-assets.mjs هو المرجع لإعادة توليدها،
+# لا تُلتزم في git. وكذلك ذاكرة تخزين مؤقت لسكربت بناء بيانات التخطيط.
+frontend/public/fonts/qpc-v2/
+scripts/.cache/
