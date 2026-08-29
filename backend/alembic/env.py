@@ -9,7 +9,7 @@ from alembic import context
 # DATABASE_URL from the environment) instead of a hardcoded ini value.
 from app.core.config import settings
 from app.db.base import Base
-from app.models import user  # noqa: F401
+from app.models import group, note_taxonomy, rubric, student, user  # noqa: F401
 
 config = context.config
 

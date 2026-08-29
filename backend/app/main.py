@@ -6,9 +6,9 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.api.routes import auth, health, users
+from app.api.routes import auth, groups, health, rubric, students, taxonomy, users
 from app.core.limiter import limiter
-from app.db.init_db import seed_admin
+from app.db.init_db import seed_admin, seed_note_taxonomy, seed_rubric_settings
 from app.db.session import SessionLocal
 
 logging.basicConfig(level=logging.INFO)
@@ -19,6 +19,8 @@ async def lifespan(_app: FastAPI):
     db = SessionLocal()
     try:
         seed_admin(db)
+        seed_note_taxonomy(db)
+        seed_rubric_settings(db)
     finally:
         db.close()
     yield
@@ -40,6 +42,10 @@ def create_app() -> FastAPI:
     application.include_router(health.router)
     application.include_router(auth.router)
     application.include_router(users.router)
+    application.include_router(groups.router)
+    application.include_router(students.router)
+    application.include_router(taxonomy.router)
+    application.include_router(rubric.router)
     return application
 
 
