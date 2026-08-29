@@ -1,9 +1,120 @@
 @import "tailwindcss";
 
-/* Design tokens land here in a later, dedicated design work package. */
+/* خطوط مستضافة ذاتياً (self-hosted) — بلا اتصال بأي CDN خارجي */
+@import "@fontsource/amiri/700.css";
+@import "@fontsource/ibm-plex-sans-arabic/400.css";
+@import "@fontsource/ibm-plex-sans-arabic/500.css";
+@import "@fontsource/ibm-plex-sans-arabic/600.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+/*
+ * Design tokens — منقولة حرفياً من docs/design/DIRECTION.md §2.
+ * أي قيمة لون/خط/مسافة في المكونات يجب أن تُشتق من هذه المتغيرات.
+ */
+:root {
+  /* الورق — عالم الإدارة */
+  --waraq: #FAF9F6;
+  --waraq-raised: #FFFFFF;
+  --hibr: #1C2333;
+  --hibr-2: #5A6072;
+  --hibr-3: #9BA0AE;
+  --khatt: #E4E2DC;
+
+  /* اللازورد — الهوية والفعل الأساسي */
+  --lazward-900: #141C3F;
+  --lazward-800: #1D2854;
+  --lazward-700: #27356E;
+  --lazward-100: #E7EAF4;
+  --nur: #F2EFE7;
+
+  /* الذهب — نادر وثمين */
+  --dhahab: #B08A3E;
+  --dhahab-bright: #D4AF5E;
+
+  /* دلالات */
+  --sahih: #2F7A52;
+  --khata-hifz: #A93B2E;
+  --khata-tajwid: #8A5A00;
+  --khata-dabt: #6B4A8E;
+  --waqf: #33667A;
+
+  /* حواف وظلال */
+  --radius-card-value: 8px;
+  --radius-control-value: 6px;
+  --shadow-float-value: 0 4px 16px rgb(20 28 63 / 0.10);
+}
+
 @theme {
+  /* ألوان → bg-waraq / text-hibr / border-khatt / bg-lazward-700 ... */
+  --color-waraq: var(--waraq);
+  --color-waraq-raised: var(--waraq-raised);
+  --color-hibr: var(--hibr);
+  --color-hibr-2: var(--hibr-2);
+  --color-hibr-3: var(--hibr-3);
+  --color-khatt: var(--khatt);
+
+  --color-lazward-900: var(--lazward-900);
+  --color-lazward-800: var(--lazward-800);
+  --color-lazward-700: var(--lazward-700);
+  --color-lazward-100: var(--lazward-100);
+  --color-nur: var(--nur);
+
+  --color-dhahab: var(--dhahab);
+  --color-dhahab-bright: var(--dhahab-bright);
+
+  --color-sahih: var(--sahih);
+  --color-khata-hifz: var(--khata-hifz);
+  --color-khata-tajwid: var(--khata-tajwid);
+  --color-khata-dabt: var(--khata-dabt);
+  --color-waqf: var(--waqf);
+
+  /* خطوط */
+  --font-display: "Amiri", serif;
+  --font-ui: "IBM Plex Sans Arabic", system-ui, sans-serif;
+  --font-time: "IBM Plex Mono", monospace;
+
+  /* سلم الحجم: 13 / 15 (الأساس) / 17 / 21 / 27 / 34 */
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 21px;
+  --text-2xl: 27px;
+  --text-3xl: 34px;
+
+  /* الحواف */
+  --radius-card: var(--radius-card-value);
+  --radius-control: var(--radius-control-value);
+
+  /* الظل الوحيد المسموح — للعناصر العائمة فقط (Modal/Toast/قوائم منسدلة) */
+  --shadow-float: var(--shadow-float-value);
 }
 
 body {
-  font-family: system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+  background: var(--waraq);
+  color: var(--hibr);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+
+/* حلقة تركيز موحّدة على كل عنصر تفاعلي — لا تعتمد على ألوان المتصفح الافتراضية */
+:focus-visible {
+  outline: 2px solid var(--lazward-700);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* أداة مساعدة للمكونات المبنية يدوياً (مثل Select) التي تحتاج نفس الحلقة برمجياً */
+.focus-ring-inset:focus-visible {
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
