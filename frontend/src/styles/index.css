@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+/* Design tokens land here in a later, dedicated design work package. */
+@theme {
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+}
