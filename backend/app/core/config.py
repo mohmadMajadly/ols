@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     COOKIE_SECURE: bool = False
     ADMIN_USERNAME: str | None = None
     ADMIN_PASSWORD: str | None = None
+    MEDIA_ROOT: str = "/data/media"
 
 
 @lru_cache

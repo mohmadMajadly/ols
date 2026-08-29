@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.api.routes import auth, groups, health, rubric, students, taxonomy, users
+from app.api.routes import auth, groups, health, notes, quran, rubric, sessions, students, taxonomy, users
 from app.core.limiter import limiter
 from app.db.init_db import seed_admin, seed_note_taxonomy, seed_rubric_settings
 from app.db.session import SessionLocal
@@ -46,6 +46,9 @@ def create_app() -> FastAPI:
     application.include_router(students.router)
     application.include_router(taxonomy.router)
     application.include_router(rubric.router)
+    application.include_router(quran.router)
+    application.include_router(sessions.router)
+    application.include_router(notes.router)
     return application
 
 

@@ -1,0 +1,89 @@
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.models.session import Attendance, SessionType
+from app.schemas.note import NoteOut
+
+
+class SessionCreate(BaseModel):
+    student_id: uuid.UUID
+    session_type: SessionType
+    attendance: Attendance = Attendance.hadir
+    range_start_surah: int | None = None
+    range_start_ayah: int | None = None
+    range_end_surah: int | None = None
+    range_end_ayah: int | None = None
+
+
+class SessionFinalize(BaseModel):
+    last_chunk_index: int = Field(ge=0)
+    duration_ms: int = Field(ge=0)
+    attendance: Attendance | None = None
+    grade: float | None = None
+    summary: str | None = None
+
+
+class SessionUpdate(BaseModel):
+    grade: float | None = None
+    summary: str | None = None
+    attendance: Attendance | None = None
+    range_start_surah: int | None = None
+    range_start_ayah: int | None = None
+    range_end_surah: int | None = None
+    range_end_ayah: int | None = None
+
+
+class RecordingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    status: str
+    mime_type: str
+    duration_ms: int | None
+    size_bytes: int | None
+
+
+class SessionListItemOut(BaseModel):
+    id: uuid.UUID
+    student_id: uuid.UUID
+    student_name: str
+    teacher_id: uuid.UUID
+    session_type: str
+    status: str
+    attendance: str
+    range_start_surah: int | None
+    range_start_ayah: int | None
+    range_end_surah: int | None
+    range_end_ayah: int | None
+    grade: float | None
+    suggested_grade: float | None
+    notes_count: int
+    started_at: datetime
+    ended_at: datetime | None
+
+
+class SessionDetailOut(BaseModel):
+    id: uuid.UUID
+    student_id: uuid.UUID
+    student_name: str
+    teacher_id: uuid.UUID
+    session_type: str
+    status: str
+    attendance: str
+    range_start_surah: int | None
+    range_start_ayah: int | None
+    range_end_surah: int | None
+    range_end_ayah: int | None
+    grade: float | None
+    suggested_grade: float | None
+    summary: str | None
+    started_at: datetime
+    ended_at: datetime | None
+    recording: RecordingOut | None
+    notes: list[NoteOut]
+
+
+class ActiveSessionOut(BaseModel):
+    session: SessionDetailOut | None
+    uploaded_chunk_indices: list[int] = []

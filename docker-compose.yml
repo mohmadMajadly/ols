@@ -23,6 +23,7 @@ services:
       DATABASE_URL: ${DATABASE_URL}
     volumes:
       - ./backend:/app
+      - media:/data/media
     ports:
       - "8000:8000"
     depends_on:
@@ -45,3 +46,4 @@ services:
 volumes:
   pgdata:
   frontend_node_modules:
+  media:
