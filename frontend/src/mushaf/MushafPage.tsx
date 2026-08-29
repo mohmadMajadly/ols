@@ -20,7 +20,11 @@ import { fetchSurahs } from '../api/quran'
 import { buildSurahNameMap, surahLabel } from '../lib/surahName'
 import { cx } from '../ui/utils'
 import { loadPageFont, loadUthmanicFont, prefetchPageFont } from './fonts'
-import { computeFitFontSize } from './measure'
+import { computeFitFontSize, measureLineNaturalWidths } from './measure'
+
+// أقصى فجوة مسموحة بين كلمتين نسبةً لحجم الخط — بعدها يتمركز السطر بفجوات طبيعية
+// بدل التمدد المشوّه (فراغات المصحف المطبوع ~0.25-0.4em؛ نسمح بهامش تبييض بسيط فوقها).
+const MAX_WORD_GAP_EM = 0.55
 
 export interface MushafHighlight {
   surah: number
@@ -135,6 +139,12 @@ export const MushafPage = forwardRef<MushafControlHandle, MushafPageProps>(funct
     return computeFitFontSize(dataQuery.data.lines, pageFamily, box.width, box.height, lineCount)
   }, [dataQuery.data, pageFamily, box.width, box.height, lineCount])
 
+  // العرض الطبيعي لكل سطر عند الحجم المختار — لكبح تمديد الفجوات في المحاذاة أدناه
+  const lineNaturalWidths = useMemo(() => {
+    if (!dataQuery.data || !pageFamily || !fontSize) return new Map<number, number>()
+    return measureLineNaturalWidths(dataQuery.data.lines, pageFamily, fontSize)
+  }, [dataQuery.data, pageFamily, fontSize])
+
   const ready = Boolean(dataQuery.data && pageFamily && uthmanicFamily && fontSize)
 
   useEffect(() => {
@@ -181,6 +191,8 @@ export const MushafPage = forwardRef<MushafControlHandle, MushafPageProps>(funct
                     highlight={highlight}
                     onWordClick={onWordClick}
                     surahName={line.surah ? surahLabel(surahNames, line.surah) : ''}
+                    naturalWidth={lineNaturalWidths.get(line.line)}
+                    containerWidth={box.width}
                   />
                 ))}
               </div>
@@ -212,6 +224,8 @@ function MushafLineView({
   highlight,
   onWordClick,
   surahName,
+  naturalWidth,
+  containerWidth,
 }: {
   line: MushafLine
   pageFamily: string
@@ -220,6 +234,8 @@ function MushafLineView({
   highlight: MushafHighlight | null
   onWordClick?: (word: MushafWord) => void
   surahName: string
+  naturalWidth?: number
+  containerWidth: number
 }) {
   if (line.type === 'surah_name') {
     return (
@@ -243,8 +259,22 @@ function MushafLineView({
     )
   }
 
+  // كبح تمديد الفجوات: المحاذاة بالطرفين فقط حين تكون الفجوة الناتجة ضمن الطبيعي؛
+  // السطر القصير (كأسطر الفاتحة في لوحة ضيقة) يتمركز بفجوة مضبوطة بدل التشدد المشوّه.
+  const gapCount = line.words.length - 1
+  const maxGapPx = fontSize * MAX_WORD_GAP_EM
+  const idealGap =
+    gapCount > 0 && naturalWidth != null && containerWidth > 0
+      ? (containerWidth - naturalWidth) / gapCount
+      : 0
+  const overstretched = line.centered || gapCount === 0 || idealGap > maxGapPx
+
   return (
-    <div dir="rtl" className={cx('flex flex-1 items-center', line.centered ? 'justify-center gap-3' : 'justify-between')}>
+    <div
+      dir="rtl"
+      className={cx('flex flex-1 items-center', overstretched ? 'justify-center' : 'justify-between')}
+      style={overstretched ? { columnGap: Math.min(maxGapPx, Math.max(idealGap, fontSize * 0.25)) } : undefined}
+    >
       {line.words.map((word) => (
         <WordSpan
           key={`${word.surah}-${word.ayah}-${word.word}`}
@@ -301,7 +331,9 @@ function WordSpan({
       className={cx(
         'inline-block rounded-[3px] px-0.5 leading-none text-hibr transition-colors duration-150',
         clickable && 'cursor-pointer',
-        wordHi ? 'border-b-2 border-dhahab bg-lazward-100' : ayahHi ? 'bg-lazward-100/55' : '',
+        // تظليل بغسلة خلفية فقط — لا خطوط ولا حدود فوق كلام الله (خط تحت الكلمة
+        // قرأه مستخدم حقيقي كعلامة شطب/خطأ في المصحف)
+        wordHi ? 'bg-dhahab/30' : ayahHi ? 'bg-lazward-100/55' : '',
       )}
     >
       {word.glyph}

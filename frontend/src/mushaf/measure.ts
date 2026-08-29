@@ -88,3 +88,26 @@ export function computeFitFontSize(
   const size = Math.min(sizeByWidth, sizeByHeight)
   return Math.min(MAX_FONT_PX, Math.max(MIN_FONT_PX, size))
 }
+
+/**
+ * العرض الطبيعي (بالبكسل، عند حجم الخط المعطى) لكل سطر آيات في الصفحة — يشمل
+ * التباعد الثابت لكل كلمة. تستهلكه المحاذاة لكبح تمديد الفجوات: السطر الذي
+ * يحتاج فجوات أوسع من الطبيعي كي يبلغ الحافتين يُعرض متمركزاً بفجوات مضبوطة
+ * بدل التمدد المشوّه (شكوى مستخدم حقيقية على صفحة الفاتحة في لوحة ضيقة).
+ */
+export function measureLineNaturalWidths(
+  lines: MushafLine[],
+  family: string,
+  fontSizePx: number,
+): Map<number, number> {
+  const widths = new Map<number, number>()
+  const ctx = getMeasureContext()
+  if (!ctx || fontSizePx <= 0) return widths
+  ctx.font = `${fontSizePx}px "${family}"`
+  for (const line of lines) {
+    if (line.type !== 'ayah' || line.words.length === 0) continue
+    const m = measureLine(ctx, line)
+    widths.set(line.line, m.glyphWidth + m.wordCount * WORD_FIXED_PADDING_PX)
+  }
+  return widths
+}
