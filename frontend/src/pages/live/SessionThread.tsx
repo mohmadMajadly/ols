@@ -32,7 +32,7 @@ export function SessionThread({ notes, elapsedMs }: { notes: ThreadNote[]; elaps
   return (
     <div className="w-full px-4 pb-4 pt-7" data-testid="session-thread">
       <div className="relative h-6" dir="ltr">
-        <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-nur/15" aria-hidden="true" />
+        <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-khatt" aria-hidden="true" />
         {notes.map((note) => {
           const pct = Math.min(100, Math.max(0, (note.timestamp_ms / total) * 100))
           return (
@@ -41,7 +41,7 @@ export function SessionThread({ notes, elapsedMs }: { notes: ThreadNote[]; elaps
               type="button"
               data-testid="thread-bead"
               className={cx(
-                'absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-lazward-900',
+                'absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-waraq',
                 noteSolidDotClass(note.color),
                 note.pending && 'opacity-60',
               )}

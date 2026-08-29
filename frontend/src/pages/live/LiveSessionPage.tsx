@@ -1,4 +1,6 @@
-// شاشة الجلسة الحية — عالم اللازورد. ملء الشاشة، بلا AppShell. أهم شاشة في المنتج:
+// شاشة الجلسة الحية — عالم الورق كسائر التطبيق (قرار المستخدم 2026-08-29؛ هويتها
+// الخاصة: التذهيب — هالة التلاوة الذهبية على الورق). ملء الشاشة، بلا AppShell.
+// أهم شاشة في المنتج:
 // المعلم يضغط زر تصنيف فتُلتقط اللحظة الزمنية فوراً (captureTimestamp في نفس معالج
 // النقرة، قبل فتح اللوحة السفلية) ثم يدوّن تفاصيلها بلا استعجال. المحرك (recorderEngine
 // وuseSessionRecorder) يُستهلك كما هو — كل رفع/إنهاء/إلغاء يمر حصراً عبره.
@@ -16,7 +18,7 @@ import type { NoteCategory } from '../../api/taxonomy'
 import { fetchTaxonomy } from '../../api/taxonomy'
 import { formatDuration } from '../../lib/formatDuration'
 import { useMediaQuery } from '../../lib/useMediaQuery'
-import { noteLazwardAccentClasses } from '../../lib/noteColors'
+import { notePaperAccentClasses } from '../../lib/noteColors'
 import { attendanceLabels, sessionTypeLabels } from '../../lib/sessionLabels'
 import type { MushafControlHandle } from '../../mushaf/MushafPage'
 import { useSessionRecorder } from '../../session/useSessionRecorder'
@@ -33,32 +35,32 @@ import { cx } from '../../ui/utils'
 import { MushafPanel } from './MushafPanel'
 import type { NoteFormState } from './NoteSheetContent'
 import { NoteSheetContent } from './NoteSheetContent'
-import { RecordingRing } from './RecordingRing'
+import { RecitationHalo } from './RecitationHalo'
 import type { ThreadNote } from './SessionThread'
 import { SessionThread } from './SessionThread'
 
 function AcquiringScreen({ studentName }: { studentName?: string }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-lazward-900 px-6 text-center">
-      <span className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dhahab-bright/60">
-        <IconMic className="h-7 w-7 text-dhahab-bright" />
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-waraq px-6 text-center">
+      <span className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dhahab/60">
+        <IconMic className="h-7 w-7 text-dhahab" />
       </span>
-      <p className="font-display text-xl text-nur">بانتظار إذن الميكروفون</p>
-      <p className="max-w-xs text-sm text-nur/70">
+      <p className="font-display text-xl text-hibr">بانتظار إذن الميكروفون</p>
+      <p className="max-w-xs text-sm text-hibr-2">
         يرجى السماح لهذا المتصفح باستخدام الميكروفون من نافذة الإذن الظاهرة لبدء تسجيل جلسة{' '}
         {studentName ? `«${studentName}»` : ''}. إن لم تظهر نافذة الإذن، تحقق من إعدادات الموقع في المتصفح.
       </p>
-      <Spinner tone="nur" size={26} />
+      <Spinner tone="lazward" size={26} />
     </div>
   )
 }
 
 function ErrorScreen({ message, onBack }: { message: string | null; onBack: () => void }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-lazward-900 px-6 text-center">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-waraq px-6 text-center">
       <IconAlertCircle className="h-10 w-10 text-khata-hifz" />
-      <p className="font-display text-xl text-nur">تعذّر إكمال الجلسة</p>
-      <p className="max-w-sm text-sm text-nur/70">{message ?? 'حدث خطأ غير متوقع، يرجى المحاولة مرة أخرى'}</p>
+      <p className="font-display text-xl text-hibr">تعذّر إكمال الجلسة</p>
+      <p className="max-w-sm text-sm text-hibr-2">{message ?? 'حدث خطأ غير متوقع، يرجى المحاولة مرة أخرى'}</p>
       <Button variant="secondary" onClick={onBack}>
         عودة إلى سجل الجلسات
       </Button>
@@ -71,7 +73,8 @@ export function LiveSessionPage() {
   const queryClient = useQueryClient()
   const toast = useToast()
   const recorder = useSessionRecorder()
-  const { snapshot, level, elapsedMs, start, finalize, cancel, captureTimestamp } = recorder
+  const { snapshot, level, elapsedMs, spectrumRef, start, finalize, cancel, captureTimestamp } =
+    recorder
 
   const [sessionInfo, setSessionInfo] = useState<SessionDetail | null>(null)
   const [threadNotes, setThreadNotes] = useState<ThreadNote[]>([])
@@ -250,8 +253,8 @@ export function LiveSessionPage() {
 
   if (!sessionInfo) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-lazward-900">
-        <Spinner tone="nur" size={28} />
+      <div className="flex min-h-screen items-center justify-center bg-waraq">
+        <Spinner tone="lazward" size={28} />
       </div>
     )
   }
@@ -266,8 +269,8 @@ export function LiveSessionPage() {
 
   if (snapshot.phase === 'cancelled') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-lazward-900">
-        <Spinner tone="nur" size={28} />
+      <div className="flex min-h-screen items-center justify-center bg-waraq">
+        <Spinner tone="lazward" size={28} />
       </div>
     )
   }
@@ -290,24 +293,22 @@ export function LiveSessionPage() {
   const showMobileMushaf = mushafOpen && !isWide
 
   return (
-    <div className={cx('flex min-h-screen flex-col bg-lazward-900', showDesktopMushaf && 'lg:flex-row')}>
+    <div className={cx('flex min-h-screen flex-col bg-waraq', showDesktopMushaf && 'lg:flex-row')}>
       <div className={cx('flex flex-1 flex-col', showDesktopMushaf && 'lg:overflow-y-auto')}>
         <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
           <header className="flex items-start justify-between gap-3 px-4 pt-6">
             <div className="min-w-0">
-              <h1 className="truncate font-display text-2xl text-nur">{sessionInfo.student_name}</h1>
-              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-nur/70">
+              <h1 className="truncate font-display text-2xl text-hibr">{sessionInfo.student_name}</h1>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-hibr-2">
                 <span>{sessionTypeLabels[sessionInfo.session_type]}</span>
                 {hasRange && (
                   <>
                     <AyahChip
-                      tone="lazward"
                       surah={surahNameByNumber.get(sessionInfo.range_start_surah as number) ?? String(sessionInfo.range_start_surah)}
                       ayah={sessionInfo.range_start_ayah as number}
                     />
-                    <span className="text-nur/40">—</span>
+                    <span className="text-hibr-3">—</span>
                     <AyahChip
-                      tone="lazward"
                       surah={surahNameByNumber.get(sessionInfo.range_end_surah as number) ?? String(sessionInfo.range_end_surah)}
                       ayah={sessionInfo.range_end_ayah as number}
                     />
@@ -324,8 +325,8 @@ export function LiveSessionPage() {
                 className={cx(
                   'flex h-9 items-center gap-1.5 rounded-control border px-3 text-sm transition-colors duration-150',
                   mushafOpen
-                    ? 'border-dhahab-bright/50 bg-dhahab-bright/10 text-dhahab-bright'
-                    : 'border-nur/15 text-nur/70 hover:bg-nur/10 hover:text-nur',
+                    ? 'border-dhahab/60 bg-dhahab/10 text-dhahab'
+                    : 'border-khatt text-hibr-2 hover:bg-lazward-100/40 hover:text-hibr',
                 )}
               >
                 <IconBook className="h-4 w-4" />
@@ -335,7 +336,7 @@ export function LiveSessionPage() {
                 <button
                   type="button"
                   onClick={() => setCancelOpen(true)}
-                  className="shrink-0 rounded-control px-2.5 py-1.5 text-sm text-nur/55 hover:bg-nur/10 hover:text-nur"
+                  className="shrink-0 rounded-control px-2.5 py-1.5 text-sm text-hibr-3 hover:bg-lazward-100/40 hover:text-hibr"
                 >
                   إلغاء
                 </button>
@@ -344,8 +345,12 @@ export function LiveSessionPage() {
           </header>
 
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-8">
-            <RecordingRing elapsedMs={elapsedMs} level={isRecording ? level : 0} />
-            <p className="text-sm text-nur/70" role="status">
+            <RecitationHalo
+              elapsedMs={elapsedMs}
+              level={isRecording ? level : 0}
+              spectrumRef={spectrumRef}
+            />
+            <p className="text-sm text-hibr-2" role="status">
               {statusText}
             </p>
           </div>
@@ -365,8 +370,8 @@ export function LiveSessionPage() {
                 className="flex flex-1 flex-col"
               />
 
-              <div className="mt-2 flex min-w-0 items-center gap-2 border-t border-nur/10 pt-2">
-                <span className="shrink-0 font-time text-sm tabular-nums text-nur/80">{formatDuration(elapsedMs)}</span>
+              <div className="mt-2 flex min-w-0 items-center gap-2 border-t border-khatt pt-2">
+                <span className="shrink-0 font-time text-sm tabular-nums text-hibr-2">{formatDuration(elapsedMs)}</span>
                 <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
                   {categories.map((category) => (
                     <button
@@ -377,8 +382,8 @@ export function LiveSessionPage() {
                       data-testid="note-category-button"
                       data-category={category.key ?? category.id}
                       className={cx(
-                        'flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-control border bg-lazward-800 px-3 text-sm font-medium transition-colors duration-150 disabled:opacity-40',
-                        noteLazwardAccentClasses(category.color),
+                        'flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-control border bg-waraq-raised px-3 text-sm font-medium transition-colors duration-150 disabled:opacity-40',
+                        notePaperAccentClasses(category.color),
                       )}
                     >
                       {category.name}
@@ -392,7 +397,7 @@ export function LiveSessionPage() {
               <div className="px-4">
                 {taxonomyQuery.isLoading ? (
                   <div className="flex justify-center py-4">
-                    <Spinner tone="nur" />
+                    <Spinner tone="lazward" />
                   </div>
                 ) : (
                   <div
@@ -410,8 +415,8 @@ export function LiveSessionPage() {
                         data-testid="note-category-button"
                         data-category={category.key ?? category.id}
                         className={cx(
-                          'flex h-14 items-center justify-center rounded-control border bg-lazward-800 px-2 text-center text-sm font-medium leading-tight transition-colors duration-150',
-                          noteLazwardAccentClasses(category.color),
+                          'flex h-14 items-center justify-center rounded-control border bg-waraq-raised px-2 text-center text-sm font-medium leading-tight transition-colors duration-150',
+                          notePaperAccentClasses(category.color),
                         )}
                       >
                         {category.name}
@@ -442,7 +447,7 @@ export function LiveSessionPage() {
       </div>
 
       {showDesktopMushaf && (
-        <div className="hidden border-s border-nur/10 bg-lazward-800/40 lg:flex lg:w-[420px] lg:shrink-0 lg:flex-col lg:overflow-y-auto lg:p-4">
+        <div className="hidden border-s border-khatt bg-waraq-raised/60 lg:flex lg:w-[420px] lg:shrink-0 lg:flex-col lg:overflow-y-auto lg:p-4">
           <MushafPanel
             rangeStartSurah={sessionInfo.range_start_surah}
             rangeStartAyah={sessionInfo.range_start_ayah}

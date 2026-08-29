@@ -25,6 +25,17 @@ const LAZWARD_ACCENT: Record<NoteColorKey, string> = {
   neutral: 'text-nur border-nur/40',
 }
 
+/** فوق الورق الفاتح (شاشة الجلسة بعد قرار 2026-08-29): نص وحد بلون الفئة على سطح مرتفع،
+ * مع غسلة خفيفة من لون الفئة عند التمرير — يوازي أسلوب Badge لكن بحجم زر لمس. */
+const PAPER_ACCENT: Record<NoteColorKey, string> = {
+  hifz: 'text-khata-hifz border-khata-hifz/45 hover:bg-khata-hifz/5',
+  tajwid: 'text-khata-tajwid border-khata-tajwid/45 hover:bg-khata-tajwid/5',
+  dabt: 'text-khata-dabt border-khata-dabt/45 hover:bg-khata-dabt/5',
+  waqf: 'text-waqf border-waqf/45 hover:bg-waqf/5',
+  sahih: 'text-sahih border-sahih/45 hover:bg-sahih/5',
+  neutral: 'text-hibr-2 border-khatt hover:bg-lazward-100/40',
+}
+
 /** خرزة مصمتة على خيط الجلسة. */
 const SOLID_DOT: Record<NoteColorKey, string> = {
   hifz: 'bg-khata-hifz',
@@ -32,7 +43,7 @@ const SOLID_DOT: Record<NoteColorKey, string> = {
   dabt: 'bg-khata-dabt',
   waqf: 'bg-waqf',
   sahih: 'bg-sahih',
-  neutral: 'bg-nur/70',
+  neutral: 'bg-hibr-3',
 }
 
 /** توكن لون الرسم البياني (--chart-*) — للاستخدام في fill/style الديناميكي داخل SVG
@@ -56,6 +67,10 @@ export function noteBadgeVariant(color: string): BadgeVariant {
 
 export function noteLazwardAccentClasses(color: string): string {
   return LAZWARD_ACCENT[key(color)]
+}
+
+export function notePaperAccentClasses(color: string): string {
+  return PAPER_ACCENT[key(color)]
 }
 
 export function noteSolidDotClass(color: string): string {

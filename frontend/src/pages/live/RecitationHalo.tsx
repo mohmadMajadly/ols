@@ -102,8 +102,9 @@ export function RecitationHalo({ elapsedMs, level, spectrumRef }: RecitationHalo
         const x1 = half + Math.cos(angle) * (inner + len)
         const y1 = half + Math.sin(angle) * (inner + len)
         const heat = state[i]
-        ctx.strokeStyle = heat > 0.45 ? dhahabBright : dhahab
-        ctx.globalAlpha = 0.45 + heat * 0.55
+        // على الورق الفاتح: الذهب الأعمق أوضح — الحرارة ترفع الكثافة والعرض لا الفاتحية
+        ctx.strokeStyle = dhahab
+        ctx.globalAlpha = 0.38 + heat * 0.62
         ctx.lineWidth = (1.6 + heat * 1.2) * dpr
         ctx.beginPath()
         ctx.moveTo(x0, y0)
@@ -136,15 +137,15 @@ export function RecitationHalo({ elapsedMs, level, spectrumRef }: RecitationHalo
       {/* التنفس الخارجي البطيء — ثابت العهد من الهوية الأولى */}
       <span
         aria-hidden="true"
-        className="absolute inset-1 rounded-full border border-dhahab-bright/50"
+        className="absolute inset-1 rounded-full border border-dhahab/45"
         style={{ animation: 'lazward-breathe 2.2s ease-in-out infinite' }}
       />
       <canvas ref={canvasRef} aria-hidden="true" className="absolute inset-0 h-full w-full" />
       <div className="relative flex flex-col items-center gap-2">
-        <span className="font-time text-3xl tabular-nums text-nur" role="timer" aria-label="مدة الجلسة">
+        <span className="font-time text-3xl tabular-nums text-hibr" role="timer" aria-label="مدة الجلسة">
           {formatDuration(elapsedMs)}
         </span>
-        <span className="h-1.5 w-1.5 rounded-full bg-dhahab-bright" aria-hidden="true" />
+        <span className="h-1.5 w-1.5 rounded-full bg-dhahab" aria-hidden="true" />
       </div>
     </div>
   )
