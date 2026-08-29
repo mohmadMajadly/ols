@@ -7,6 +7,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 
+import type { MushafWord } from '../../api/mushaf'
 import { fetchMushafPageFor } from '../../api/mushaf'
 import { getLastMushafPage, setLastMushafPage } from '../../mushaf/lastPage'
 import type { MushafControlHandle } from '../../mushaf/MushafPage'
@@ -20,10 +21,19 @@ export interface MushafPanelProps {
   onClose: () => void
   /** يُبلَّغ بمقبض التحكم بعد جاهزيته — نقطة الربط الجاهزة لخدمة التتبع الصوتي (WP9c). */
   onControlReady?: (handle: MushafControlHandle) => void
+  /** نقرة على كلمة — يستخدمها التتبع الصوتي لزر "أرجِع المؤشر إلى هنا" (WP9c §3). */
+  onWordClick?: (word: MushafWord) => void
   className?: string
 }
 
-export function MushafPanel({ rangeStartSurah, rangeStartAyah, onClose, onControlReady, className }: MushafPanelProps) {
+export function MushafPanel({
+  rangeStartSurah,
+  rangeStartAyah,
+  onClose,
+  onControlReady,
+  onWordClick,
+  className,
+}: MushafPanelProps) {
   const [startPage, setStartPage] = useState<number | null>(null)
   const controlRef = useRef<MushafControlHandle>(null)
   const resolvedRef = useRef(false)
@@ -102,6 +112,7 @@ export function MushafPanel({ rangeStartSurah, rangeStartAyah, onClose, onContro
         ref={(handle) => handleControlAttach(handle)}
         initialPage={startPage}
         onPageChange={setLastMushafPage}
+        onWordClick={onWordClick}
       />
     </div>
   )

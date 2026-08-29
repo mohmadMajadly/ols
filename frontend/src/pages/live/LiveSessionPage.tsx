@@ -9,6 +9,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
+import type { MushafWord } from '../../api/mushaf'
+import { fetchMushafPageFor } from '../../api/mushaf'
 import { ApiError } from '../../api/client'
 import { createNote } from '../../api/notes'
 import { fetchSurahs } from '../../api/quran'
@@ -16,16 +18,19 @@ import type { Attendance, SessionDetail } from '../../api/sessions'
 import { fetchActiveSession, fetchSession } from '../../api/sessions'
 import type { NoteCategory } from '../../api/taxonomy'
 import { fetchTaxonomy } from '../../api/taxonomy'
+import { fetchExpectedWords } from '../../api/tracking'
 import { formatDuration } from '../../lib/formatDuration'
 import { useMediaQuery } from '../../lib/useMediaQuery'
 import { notePaperAccentClasses } from '../../lib/noteColors'
 import { attendanceLabels, sessionTypeLabels } from '../../lib/sessionLabels'
 import type { MushafControlHandle } from '../../mushaf/MushafPage'
+import type { TrackingPosition, TrackingStatus } from '../../session/trackingClient'
+import { TrackingClient } from '../../session/trackingClient'
 import { useSessionRecorder } from '../../session/useSessionRecorder'
 import { AyahChip } from '../../ui/AyahChip'
 import { BottomSheet } from '../../ui/BottomSheet'
 import { Button } from '../../ui/Button'
-import { IconAlertCircle, IconBook, IconMic } from '../../ui/icons'
+import { IconAlertCircle, IconBook, IconMic, IconTracking } from '../../ui/icons'
 import { Modal } from '../../ui/Modal'
 import { Select } from '../../ui/Select'
 import { Spinner } from '../../ui/Spinner'
@@ -73,8 +78,17 @@ export function LiveSessionPage() {
   const queryClient = useQueryClient()
   const toast = useToast()
   const recorder = useSessionRecorder()
-  const { snapshot, level, elapsedMs, spectrumRef, start, finalize, cancel, captureTimestamp } =
-    recorder
+  const {
+    snapshot,
+    level,
+    elapsedMs,
+    spectrumRef,
+    start,
+    finalize,
+    cancel,
+    captureTimestamp,
+    getMediaStream,
+  } = recorder
 
   const [sessionInfo, setSessionInfo] = useState<SessionDetail | null>(null)
   const [threadNotes, setThreadNotes] = useState<ThreadNote[]>([])
@@ -92,8 +106,14 @@ export function LiveSessionPage() {
   // الموبايل — isWide يختار مكان عرض نسخة اللوحة الوحيدة (لا نُركّب نسختين معاً أبداً).
   const [mushafOpen, setMushafOpen] = useState(false)
   const isWide = useMediaQuery('(min-width: 1024px)')
-  // نقطة ربط جاهزة لخدمة التتبع الصوتي (WP9c) — لا مستهلك لها بعد داخل هذه الحزمة.
   const mushafControlRef = useRef<MushafControlHandle | null>(null)
+
+  // التتبع الصوتي الآني (WP9c) — ميزة مساعدة قابلة للإطفاء بالكامل؛ فشلها لا يظهر
+  // كخطأ جلسة أبداً ولا يمسّ التسجيل (recorder أعلاه يبقى المسار المستقل الوحيد).
+  const [trackingOn, setTrackingOn] = useState(false)
+  const [trackingStatus, setTrackingStatus] = useState<TrackingStatus>('stopped')
+  const [pendingResetWord, setPendingResetWord] = useState<MushafWord | null>(null)
+  const trackingClientRef = useRef<TrackingClient | null>(null)
 
   // مفتاح مستقل عن ['sessions','active'] المستخدم في SessionsPage عمداً: تلك الصفحة
   // قد تكون خزّنت {session: null} قبل إنشاء الجلسة (زر «بدء جلسة تسميع» ينتقل هنا فوراً
@@ -159,6 +179,77 @@ export function LiveSessionPage() {
       })
     setThreadNotes(initial)
   }, [sessionInfo, taxonomyQuery.isLoading, categoryById])
+
+  function stopTracking() {
+    trackingClientRef.current?.stop()
+    trackingClientRef.current = null
+    setTrackingOn(false)
+    setTrackingStatus('stopped')
+    setPendingResetWord(null)
+  }
+
+  // إيقاف تلقائي هادئ للتتبع عند إغلاق المصحف أو خروج الجلسة من حالة recording —
+  // التسجيل نفسه (recorder) لا علاقة له بهذا إطلاقاً ويستمر بمعزل تام.
+  useEffect(() => {
+    if (!mushafOpen) stopTracking()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mushafOpen])
+
+  useEffect(() => {
+    if (snapshot.phase !== 'recording') stopTracking()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot.phase])
+
+  useEffect(() => {
+    return () => trackingClientRef.current?.stop()
+  }, [])
+
+  async function handleTrackingPosition(pos: TrackingPosition) {
+    mushafControlRef.current?.highlight({ surah: pos.surah, ayah: pos.ayah, word: pos.word })
+    const currentPage = mushafControlRef.current?.getPage()
+    try {
+      const location = await queryClient.fetchQuery({
+        queryKey: ['mushaf', 'page-for', pos.surah, pos.ayah],
+        queryFn: () => fetchMushafPageFor(pos.surah, pos.ayah),
+        staleTime: Infinity,
+      })
+      if (currentPage != null && location.page !== currentPage) {
+        mushafControlRef.current?.goToPage(location.page)
+      }
+    } catch {
+      // فشل نادر في تحديد الصفحة — التظليل نفسه يبقى صحيحاً على الصفحة الحالية
+    }
+  }
+
+  function handleToggleTracking() {
+    if (trackingOn) {
+      stopTracking()
+      return
+    }
+    // التفرع القرائي على تيار ميكروفون المحرك نفسه — لا ميكروفون ثانٍ أبداً
+    const stream = getMediaStream()
+    if (!stream || !sessionInfo) return
+    const client = new TrackingClient(
+      sessionInfo.id,
+      stream,
+      { onStatusChange: setTrackingStatus, onPosition: (pos) => void handleTrackingPosition(pos) },
+      () => fetchExpectedWords(sessionInfo.id),
+    )
+    trackingClientRef.current = client
+    setTrackingOn(true)
+    void client.start()
+  }
+
+  function handleMushafWordClick(word: MushafWord) {
+    if (word.is_ayah_marker) return
+    setPendingResetWord(word)
+  }
+
+  function handleConfirmResetWord() {
+    if (!pendingResetWord) return
+    trackingClientRef.current?.resetToWord(pendingResetWord)
+    setPendingResetWord(null)
+  }
 
   // عند نجاح الإنهاء: اجلب الدرجة المقترحة للـToast ثم انتقل لصفحة التفاصيل
   const finishedNavigatedRef = useRef(false)
@@ -292,6 +383,46 @@ export function LiveSessionPage() {
   const showDesktopMushaf = mushafOpen && isWide
   const showMobileMushaf = mushafOpen && !isWide
 
+  const trackingStatusLabel =
+    trackingStatus === 'connecting'
+      ? 'جارٍ تجهيز التتبع…'
+      : trackingStatus === 'active'
+        ? 'التتبع نشط'
+        : trackingStatus === 'paused'
+          ? 'التتبع متوقف مؤقتاً — التسجيل مستمر'
+          : null
+
+  const trackingBar =
+    trackingOn && trackingStatusLabel ? (
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-control border border-khatt bg-waraq-raised px-3 py-1.5 text-xs">
+        <span className="flex items-center gap-1.5 text-hibr-2">
+          {trackingStatus === 'connecting' && <Spinner tone="lazward" size={12} />}
+          {trackingStatus === 'active' && <span className="h-1.5 w-1.5 rounded-full bg-sahih" />}
+          {trackingStatus === 'paused' && <span className="h-1.5 w-1.5 rounded-full bg-khata-hifz" />}
+          {trackingStatusLabel}
+        </span>
+        {pendingResetWord && (
+          <span className="flex items-center gap-1.5">
+            <span className="text-hibr-3">أرجِع المؤشر إلى هنا؟</span>
+            <button
+              type="button"
+              onClick={handleConfirmResetWord}
+              className="rounded-control border border-dhahab/60 bg-dhahab/10 px-2 py-0.5 text-dhahab hover:bg-dhahab/20"
+            >
+              تأكيد
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingResetWord(null)}
+              className="text-hibr-3 hover:text-hibr"
+            >
+              إلغاء
+            </button>
+          </span>
+        )}
+      </div>
+    ) : null
+
   return (
     <div className={cx('flex min-h-screen flex-col bg-waraq', showDesktopMushaf && 'lg:flex-row')}>
       <div className={cx('flex flex-1 flex-col', showDesktopMushaf && 'lg:overflow-y-auto')}>
@@ -332,6 +463,25 @@ export function LiveSessionPage() {
                 <IconBook className="h-4 w-4" />
                 المصحف
               </button>
+              {hasRange && (
+                <button
+                  type="button"
+                  onClick={handleToggleTracking}
+                  disabled={!mushafOpen || !isRecording}
+                  aria-pressed={trackingOn}
+                  data-testid="toggle-tracking"
+                  title={!mushafOpen ? 'افتح المصحف أولاً لتفعيل التتبع' : undefined}
+                  className={cx(
+                    'flex h-9 items-center gap-1.5 rounded-control border px-3 text-sm transition-colors duration-150 disabled:opacity-40',
+                    trackingOn
+                      ? 'border-dhahab/60 bg-dhahab/10 text-dhahab'
+                      : 'border-khatt text-hibr-2 hover:bg-lazward-100/40 hover:text-hibr',
+                  )}
+                >
+                  <IconTracking className="h-4 w-4" />
+                  التتبع
+                </button>
+              )}
               {isRecording && (
                 <button
                   type="button"
@@ -360,6 +510,7 @@ export function LiveSessionPage() {
             // للمساحة)، والمؤقت أعلاه يبقى ظاهراً كما هو، وشريط مضغوط تحت اللوحة يبقي
             // المؤقت وملاحظة سريعة بمتناول اليد (DIRECTION §3 — هذه شاشة اللمس الأساسية).
             <div className="flex flex-1 flex-col px-4">
+              {trackingBar}
               <MushafPanel
                 rangeStartSurah={sessionInfo.range_start_surah}
                 rangeStartAyah={sessionInfo.range_start_ayah}
@@ -367,6 +518,7 @@ export function LiveSessionPage() {
                 onControlReady={(handle) => {
                   mushafControlRef.current = handle
                 }}
+                onWordClick={trackingOn ? handleMushafWordClick : undefined}
                 className="flex flex-1 flex-col"
               />
 
@@ -448,6 +600,7 @@ export function LiveSessionPage() {
 
       {showDesktopMushaf && (
         <div className="hidden border-s border-khatt bg-waraq-raised/60 lg:flex lg:w-[420px] lg:shrink-0 lg:flex-col lg:overflow-y-auto lg:p-4">
+          {trackingBar}
           <MushafPanel
             rangeStartSurah={sessionInfo.range_start_surah}
             rangeStartAyah={sessionInfo.range_start_ayah}
@@ -455,6 +608,7 @@ export function LiveSessionPage() {
             onControlReady={(handle) => {
               mushafControlRef.current = handle
             }}
+            onWordClick={trackingOn ? handleMushafWordClick : undefined}
             className="flex flex-1 flex-col"
           />
         </div>

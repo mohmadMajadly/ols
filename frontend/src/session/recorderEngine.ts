@@ -135,6 +135,14 @@ export class RecorderEngine {
     this.emit()
   }
 
+  /**
+   * تيار الميكروفون الجاري — قراءة فقط، لخدمات تتفرع عليه دون فتح ميكروفون
+   * ثانٍ (التتبع الصوتي WP9c). لا يمنح أي تحكم بالمسجل نفسه.
+   */
+  get mediaStream(): MediaStream | null {
+    return this.stream
+  }
+
   /** الطابع الزمني للملاحظة — يُلتقط لحظة الضغط مهما طالت كتابتها بعد ذلك */
   getTimestampMs(): number {
     if (this.phase !== 'recording') return this.priorMs

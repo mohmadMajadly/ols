@@ -18,6 +18,7 @@ from app.api.routes import (
     sessions,
     students,
     taxonomy,
+    tracking,
     users,
 )
 from app.core.limiter import limiter
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
     application.include_router(quran.router)
     application.include_router(mushaf.router)
     application.include_router(sessions.router)
+    application.include_router(tracking.router)
     application.include_router(notes.router)
     application.include_router(dashboard.router)
     return application

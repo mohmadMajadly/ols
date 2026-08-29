@@ -78,5 +78,20 @@ export function useSessionRecorder() {
     return engineRef.current?.getTimestampMs() ?? 0
   }, [])
 
-  return { snapshot, level, elapsedMs, spectrumRef, start, finalize, cancel, captureTimestamp }
+  /** تيار الميكروفون الجاري (قراءة فقط) — للتفرع عليه في التتبع الصوتي دون ميكروفون ثانٍ */
+  const getMediaStream = useCallback((): MediaStream | null => {
+    return engineRef.current?.mediaStream ?? null
+  }, [])
+
+  return {
+    snapshot,
+    level,
+    elapsedMs,
+    spectrumRef,
+    start,
+    finalize,
+    cancel,
+    captureTimestamp,
+    getMediaStream,
+  }
 }

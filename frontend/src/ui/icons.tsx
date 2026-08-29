@@ -272,6 +272,18 @@ export function IconRefresh(props: IconProps) {
   )
 }
 
+// أيقونة زر "التتبع" (WP9c — التتبع الصوتي الآني): دوائر رادار متمركزة حول نقطة —
+// استعارة بصرية لتتبّع موضع حي، متسقة مع أسلوب stroke البسيط لبقية الأيقونات.
+export function IconTracking(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="8.5" strokeOpacity="0.55" />
+    </svg>
+  )
+}
+
 export function IconLogout(props: IconProps) {
   return (
     <svg {...base} {...props}>

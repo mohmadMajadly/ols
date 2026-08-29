@@ -54,3 +54,36 @@ def get_page_for_ayah(surah: int, ayah: int) -> dict[str, int] | None:
     data = _load()
     key = f"{surah}:{ayah}"
     return data["index"].get(key)
+
+
+@lru_cache(maxsize=1)
+def _all_words() -> list[dict[str, int | str]]:
+    """قائمة مسطّحة بكل كلمات القرآن بترتيب المصحف (صفحة فصفحة، سطر فسطر) —
+    مستبعدةً "كلمات" رقم الآية (is_ayah_marker) التي لا تُنطق (WP9c: كلمات
+    التتبع الصوتي المتوقعة). تُبنى مرة واحدة فقط وتبقى في الذاكرة."""
+    data = _load()
+    out: list[dict[str, int | str]] = []
+    for page in data["pages"]:
+        for line in page["lines"]:
+            for word in line.get("words", []):
+                if word["is_ayah_marker"]:
+                    continue
+                out.append(
+                    {
+                        "surah": word["surah"],
+                        "ayah": word["ayah"],
+                        "word": word["word"],
+                        "text": word["text_uthmani"],
+                    }
+                )
+    return out
+
+
+def get_words_in_range(
+    start_surah: int, start_ayah: int, end_surah: int, end_ayah: int
+) -> list[dict[str, int | str]]:
+    """كلمات نطاق [بداية، نهاية] بترتيب المصحف (شاملاً الطرفين) — أساس التتبع
+    الصوتي (WP9c): قائمة الكلمات المتوقعة التي يحاذيها RecitationTracker."""
+    start_key = (start_surah, start_ayah)
+    end_key = (end_surah, end_ayah)
+    return [w for w in _all_words() if start_key <= (w["surah"], w["ayah"]) <= end_key]

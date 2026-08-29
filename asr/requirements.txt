@@ -1,0 +1,18 @@
+# خدمة asr (WP9c) — CT2/faster-whisper بلا GPU. torch/transformers لازمان فقط
+# لتحويل tarteel-ai/whisper-base-ar-quran إلى CTranslate2 INT8 عند أول إقلاع
+# (ct2-transformers-converter، من حزمة ctranslate2) — الاستدلال الفعلي بعدها
+# يمر عبر faster-whisper/ctranslate2 وحده (سريع، CPU فقط).
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+numpy==1.26.4
+rapidfuzz==3.10.1
+huggingface_hub>=0.24,<1
+transformers>=4.44,<5
+torch>=2.6,<3
+ctranslate2>=4.4,<5
+faster-whisper>=1.0.3,<2
+pytest==8.3.4
+pytest-asyncio==0.25.0
+httpx==0.28.1

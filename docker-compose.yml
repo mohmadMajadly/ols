@@ -14,6 +14,29 @@ services:
       timeout: 5s
       retries: 10
 
+  # خدمة التتبع الصوتي الآني (WP9c) — WebSocket داخلي فقط (بلا منفذ للمضيف)،
+  # يخاطبها الـbackend حصراً عبر ASR_URL. faster-whisper (CTranslate2 INT8)
+  # على CPU بنموذج tarteel-ai/whisper-base-ar-quran، يُحوَّل مرة واحدة عند
+  # أول إقلاع إلى volume asr_models (قد يستغرق دقائق أول مرة — start_period
+  # يمنح مهلة كافية قبل اعتبار الحاوية غير سليمة).
+  asr:
+    build: ./asr
+    restart: unless-stopped
+    volumes:
+      - asr_models:/models
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8090/health', timeout=3).status == 200 else 1)",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 40
+      start_period: 900s
+
   backend:
     build: ./backend
     restart: unless-stopped
@@ -21,6 +44,8 @@ services:
       - .env
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      # عنوان WS داخلي لخدمة asr — شبكة compose فقط (WP9c)
+      ASR_URL: ws://asr:8090
     volumes:
       - ./backend:/app
       - media:/data/media
@@ -29,6 +54,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      asr:
+        condition: service_started
 
   frontend:
     build: ./frontend
@@ -61,3 +88,4 @@ volumes:
   frontend_node_modules:
   media:
   caddy_dev_data:
+  asr_models:

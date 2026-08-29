@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     ADMIN_USERNAME: str | None = None
     ADMIN_PASSWORD: str | None = None
     MEDIA_ROOT: str = "/data/media"
+    # عنوان WebSocket الداخلي لخدمة التتبع الصوتي (WP9c) — شبكة compose فقط، بلا منفذ للمضيف
+    ASR_URL: str = "ws://asr:8090"
 
 
 @lru_cache

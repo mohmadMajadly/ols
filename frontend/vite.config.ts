@@ -16,6 +16,8 @@ export default defineConfig({
       '/api': {
         target: 'http://backend:8000',
         changeOrigin: true,
+        // يلزم لترقية WebSocket على /api/sessions/{id}/track (WP9c — التتبع الصوتي الآني)
+        ws: true,
       },
     },
   },
