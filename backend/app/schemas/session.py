@@ -18,8 +18,11 @@ class SessionCreate(BaseModel):
 
 
 class SessionFinalize(BaseModel):
-    last_chunk_index: int = Field(ge=0)
-    duration_ms: int = Field(ge=0)
+    # {segment: last_chunk_index} لكل segment (بث MediaRecorder) رُفعت أجزاؤه.
+    segments: dict[int, int] = Field(default_factory=dict)
+    # اختياري الآن: المدة الفعلية تُشتق من ffprobe على الملف النهائي بعد
+    # الدمج؛ قيمة العميل هنا تُستخدم fallback فقط إن فشل ffprobe.
+    duration_ms: int | None = Field(default=None, ge=0)
     attendance: Attendance | None = None
     grade: float | None = None
     summary: str | None = None
@@ -86,4 +89,6 @@ class SessionDetailOut(BaseModel):
 
 class ActiveSessionOut(BaseModel):
     session: SessionDetailOut | None
-    uploaded_chunk_indices: list[int] = []
+    # {segment: [الفهارس المرفوعة]} - العميل يبدأ segment جديداً برقم أعلى
+    # من الأقصى الموجود هنا.
+    uploaded: dict[int, list[int]] = {}

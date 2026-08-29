@@ -318,9 +318,13 @@ export class RecorderEngine {
         continue
       }
       if (res.status === 409) {
-        // الخادم يسمّي الناقص — أعد رفعه من الذاكرة إن كان عندنا ثم أعد الإنهاء
-        const body = (await res.json().catch(() => null)) as { missing?: Record<string, number[]> } | null
-        const missing = body?.missing ?? {}
+        // الخادم يسمّي الناقص (FastAPI يغلّفه داخل detail) — أعد رفعه من
+        // الذاكرة إن كان عندنا ثم أعد الإنهاء
+        const body = (await res.json().catch(() => null)) as {
+          missing?: Record<string, number[]>
+          detail?: { missing?: Record<string, number[]> }
+        } | null
+        const missing = body?.detail?.missing ?? body?.missing ?? {}
         let recovered = true
         for (const [seg, indices] of Object.entries(missing)) {
           for (const idx of indices) {

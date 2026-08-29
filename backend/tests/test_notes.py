@@ -129,7 +129,7 @@ def test_note_accepts_valid_payload_and_timed_ordering(client, db_session):
     assert notes[1]["timestamp_ms"] == 5000
 
 
-def _setup_completed_session_with_deducting_note(client, db_session, *, teacher_username):
+def _setup_completed_session_with_deducting_note(client, db_session, make_webm_audio, *, teacher_username):
     _, student = _setup_teacher_with_student(db_session, teacher_username=teacher_username)
     _login(client, teacher_username, "Password123!")
     session_id = _create_session(client, student.id)
@@ -142,10 +142,9 @@ def _setup_completed_session_with_deducting_note(client, db_session, *, teacher_
     assert note_resp.status_code == 201
     note_id = note_resp.json()["id"]
 
-    client.put(f"/api/sessions/{session_id}/chunks/0", content=b"X")
-    finalize_resp = client.post(
-        f"/api/sessions/{session_id}/finalize", json={"last_chunk_index": 0, "duration_ms": 100}
-    )
+    audio = make_webm_audio(0.2)
+    client.put(f"/api/sessions/{session_id}/chunks/0", content=audio)
+    finalize_resp = client.post(f"/api/sessions/{session_id}/finalize", json={"segments": {"0": 0}})
     assert finalize_resp.status_code == 200
     # الخصم الافتراضي لـ hifz/talqin هو 1.5 -> 100 - 1.5 = 98.5
     assert finalize_resp.json()["suggested_grade"] == 98.5
@@ -153,9 +152,9 @@ def _setup_completed_session_with_deducting_note(client, db_session, *, teacher_
     return session_id, note_id
 
 
-def test_recompute_grade_after_delete_updates_untouched_auto_grade(client, db_session):
+def test_recompute_grade_after_delete_updates_untouched_auto_grade(client, db_session, make_webm_audio):
     session_id, note_id = _setup_completed_session_with_deducting_note(
-        client, db_session, teacher_username="grade_teacher1"
+        client, db_session, make_webm_audio, teacher_username="grade_teacher1"
     )
 
     delete_resp = client.delete(f"/api/notes/{note_id}")
@@ -166,9 +165,9 @@ def test_recompute_grade_after_delete_updates_untouched_auto_grade(client, db_se
     assert detail["grade"] == 100.0
 
 
-def test_recompute_grade_after_delete_leaves_manual_grade_untouched(client, db_session):
+def test_recompute_grade_after_delete_leaves_manual_grade_untouched(client, db_session, make_webm_audio):
     session_id, note_id = _setup_completed_session_with_deducting_note(
-        client, db_session, teacher_username="grade_teacher2"
+        client, db_session, make_webm_audio, teacher_username="grade_teacher2"
     )
 
     patch_resp = client.patch(f"/api/sessions/{session_id}", json={"grade": 70})

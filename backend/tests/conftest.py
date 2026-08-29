@@ -121,3 +121,32 @@ def client(db_session):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def make_webm_audio(tmp_path):
+    """مصنع يولّد صوت webm/opus حقيقي عبر ffmpeg (lavfi sine) - يُستخدم
+    لاختبار دمج WP4a (chunks -> segment -> ffmpeg remux/concat) بمدخلات
+    صالحة فعلاً بدل بايتات وهمية، لأن finalize الآن يستدعي ffmpeg دوماً."""
+
+    def _make(duration_s: float, frequency: int = 440) -> bytes:
+        out_path = tmp_path / f"gen_{frequency}_{duration_s}.webm"
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                f"sine=frequency={frequency}:duration={duration_s}",
+                "-c:a",
+                "libopus",
+                str(out_path),
+            ],
+            capture_output=True,
+            timeout=30,
+        )
+        assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")
+        return out_path.read_bytes()
+
+    return _make

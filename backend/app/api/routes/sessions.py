@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,6 +30,8 @@ from app.schemas.session import (
 from app.services import media_storage
 from app.services.session_access import get_visible_session_or_404
 from app.services.session_grading import compute_session_suggested_grade, to_decimal_grade
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["sessions"])
 
@@ -200,10 +203,10 @@ def get_active_session(
         .first()
     )
     if session is None:
-        return ActiveSessionOut(session=None, uploaded_chunk_indices=[])
+        return ActiveSessionOut(session=None, uploaded={})
 
-    indices = media_storage.list_uploaded_chunk_indices(session.id)
-    return ActiveSessionOut(session=_session_detail(db, session), uploaded_chunk_indices=indices)
+    uploaded = media_storage.list_uploaded_indices_by_segment(session.id)
+    return ActiveSessionOut(session=_session_detail(db, session), uploaded=uploaded)
 
 
 @router.get("/api/sessions", response_model=list[SessionListItemOut])
@@ -282,6 +285,7 @@ async def upload_chunk(
     session_id: uuid.UUID,
     index: int,
     request: Request,
+    segment: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*_staff_roles)),
 ) -> Response:
@@ -294,7 +298,7 @@ async def upload_chunk(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="رقم المقطع غير صحيح")
 
     body = await _read_limited_body(request, MAX_CHUNK_SIZE)
-    media_storage.write_chunk(session_id, index, body)
+    media_storage.write_chunk(session_id, segment, index, body)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -309,25 +313,58 @@ def finalize_session(
     if session.status != "recording":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="الجلسة ليست قيد التسجيل")
 
-    uploaded = media_storage.list_uploaded_chunk_indices(session_id)
-    missing = media_storage.missing_chunk_indices(uploaded, payload.last_chunk_index)
-    if missing:
+    if not payload.segments:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "message": "توجد أجزاء ناقصة من التسجيل، يرجى إعادة رفعها",
-                "missing_indices": missing,
-            },
+            status_code=status.HTTP_400_BAD_REQUEST, detail="يجب رفع مقطع صوتي واحد على الأقل قبل الإنهاء"
         )
 
-    size_bytes = media_storage.merge_chunks(session_id, payload.last_chunk_index)
+    uploaded_by_segment = media_storage.list_uploaded_indices_by_segment(session_id)
+
+    missing_by_segment: dict[str, list[int]] = {}
+    for segment, last_index in payload.segments.items():
+        uploaded = uploaded_by_segment.get(segment, [])
+        missing = media_storage.missing_chunk_indices(uploaded, last_index)
+        if missing:
+            missing_by_segment[str(segment)] = missing
+
+    unexpected_segments = sorted(set(uploaded_by_segment.keys()) - set(payload.segments.keys()))
+
+    if missing_by_segment or unexpected_segments:
+        detail: dict = {"message": "توجد أجزاء ناقصة أو غير مذكورة من التسجيل، يرجى إعادة رفعها"}
+        if missing_by_segment:
+            detail["missing"] = missing_by_segment
+        if unexpected_segments:
+            detail["unexpected_segments"] = unexpected_segments
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+    try:
+        segment_paths = [
+            media_storage.merge_segment_chunks(session_id, segment, payload.segments[segment])
+            for segment in sorted(payload.segments.keys())
+        ]
+        final_path = media_storage.concat_segments(session_id, segment_paths)
+    except media_storage.FfmpegError as exc:
+        logger.error("فشل دمج التسجيل بـ ffmpeg للجلسة %s: %s", session_id, exc)
+        recording = db.query(Recording).filter(Recording.session_id == session_id).first()
+        if recording is not None:
+            recording.status = "failed"
+            db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="تعذّر معالجة التسجيل الصوتي، يرجى المحاولة مرة أخرى",
+        ) from exc
+
+    size_bytes = final_path.stat().st_size
+    duration_ms = media_storage.probe_duration_ms(final_path)
+    if duration_ms is None:
+        duration_ms = payload.duration_ms
 
     recording = db.query(Recording).filter(Recording.session_id == session_id).first()
     if recording is None:
         recording = Recording(session_id=session_id)
         db.add(recording)
     recording.status = "ready"
-    recording.duration_ms = payload.duration_ms
+    recording.duration_ms = duration_ms
     recording.size_bytes = size_bytes
     recording.file_path = media_storage.recording_relative_path(session_id)
     recording.finalized_at = datetime.now(timezone.utc)

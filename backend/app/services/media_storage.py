@@ -1,31 +1,49 @@
 """تخزين ملفات الوسائط (تسجيلات الجلسات) على القرص تحت MEDIA_ROOT.
 
 بنية الملفات:
-    {MEDIA_ROOT}/recordings/{session_id}/chunk_{index:05d}.part  (أثناء الرفع)
-    {MEDIA_ROOT}/recordings/{session_id}/recording.webm          (بعد الإنهاء)
+    {MEDIA_ROOT}/recordings/{session_id}/seg_{segment:03d}_chunk_{index:05d}.part
+        أثناء الرفع - كل بث MediaRecorder (segment) له فهرسة chunks خاصة به.
+    {MEDIA_ROOT}/recordings/{session_id}/seg_{segment:03d}.webm
+        ملف وسيط: إلحاق chunks segment واحد بالترتيب (صحيح داخلياً لأنه بث
+        MediaRecorder واحد متصل).
+    {MEDIA_ROOT}/recordings/{session_id}/recording.webm
+        الملف النهائي بعد إعادة كبس/دمج ffmpeg لكل الـsegments - له فهارس
+        قفز (cues) ومدة صحيحة في الترويسة.
 
 كل القراءة/الكتابة هنا مجزأة (streamed) بحجم ثابت - لا تحميل ملفات
-كاملة في الذاكرة.
+كاملة في الذاكرة. دمج الـsegments النهائي يمر عبر ffmpeg/ffprobe
+(subprocess) لأن الإلحاق الخام لبثوق webm منفصلة ينتج ملفاً غير قابل
+للتشغيل بعد أول بث.
 """
 
 import re
 import shutil
+import subprocess
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
 
 from app.core.config import settings
 
-CHUNK_INDEX_RE = re.compile(r"^chunk_(\d{5})\.part$")
+SEG_CHUNK_RE = re.compile(r"^seg_(\d{3})_chunk_(\d{5})\.part$")
 STREAM_READ_SIZE = 1024 * 1024  # 1MB
+FFMPEG_TIMEOUT_SECONDS = 120
+
+
+class FfmpegError(RuntimeError):
+    """يُرفع عند فشل عملية ffmpeg/ffprobe أثناء دمج التسجيل النهائي."""
 
 
 def session_media_dir(session_id: uuid.UUID) -> Path:
     return Path(settings.MEDIA_ROOT) / "recordings" / str(session_id)
 
 
-def chunk_file_path(session_id: uuid.UUID, index: int) -> Path:
-    return session_media_dir(session_id) / f"chunk_{index:05d}.part"
+def chunk_file_path(session_id: uuid.UUID, segment: int, index: int) -> Path:
+    return session_media_dir(session_id) / f"seg_{segment:03d}_chunk_{index:05d}.part"
+
+
+def segment_file_path(session_id: uuid.UUID, segment: int) -> Path:
+    return session_media_dir(session_id) / f"seg_{segment:03d}.webm"
 
 
 def recording_file_path(session_id: uuid.UUID) -> Path:
@@ -37,27 +55,34 @@ def recording_relative_path(session_id: uuid.UUID) -> str:
     return f"recordings/{session_id}/recording.webm"
 
 
-def write_chunk(session_id: uuid.UUID, index: int, data: bytes) -> None:
-    """يكتب مقطعاً على القرص. عملية idempotent: إعادة رفع نفس الفهرس تستبدله."""
+def write_chunk(session_id: uuid.UUID, segment: int, index: int, data: bytes) -> None:
+    """يكتب مقطعاً على القرص. عملية idempotent: إعادة رفع نفس (segment, index)
+    تستبدله بالكامل (كتابة بملف مؤقت ثم استبدال ذرّي)."""
     directory = session_media_dir(session_id)
     directory.mkdir(parents=True, exist_ok=True)
-    final_path = chunk_file_path(session_id, index)
+    final_path = chunk_file_path(session_id, segment, index)
     tmp_path = final_path.with_name(final_path.name + ".tmp")
     with open(tmp_path, "wb") as f:
         f.write(data)
     tmp_path.replace(final_path)
 
 
-def list_uploaded_chunk_indices(session_id: uuid.UUID) -> list[int]:
+def list_uploaded_indices_by_segment(session_id: uuid.UUID) -> dict[int, list[int]]:
+    """يعيد {segment: [الفهارس المرفوعة مرتّبة]} اعتماداً على أجزاء .part
+    الموجودة فعلياً على القرص."""
     directory = session_media_dir(session_id)
     if not directory.exists():
-        return []
-    indices = []
+        return {}
+    result: dict[int, list[int]] = {}
     for entry in directory.iterdir():
-        match = CHUNK_INDEX_RE.match(entry.name)
+        match = SEG_CHUNK_RE.match(entry.name)
         if match:
-            indices.append(int(match.group(1)))
-    return sorted(indices)
+            segment = int(match.group(1))
+            index = int(match.group(2))
+            result.setdefault(segment, []).append(index)
+    for indices in result.values():
+        indices.sort()
+    return result
 
 
 def missing_chunk_indices(uploaded: list[int], last_chunk_index: int) -> list[int]:
@@ -65,30 +90,139 @@ def missing_chunk_indices(uploaded: list[int], last_chunk_index: int) -> list[in
     return [i for i in range(last_chunk_index + 1) if i not in uploaded_set]
 
 
-def merge_chunks(session_id: uuid.UUID, last_chunk_index: int) -> int:
-    """يدمج chunk_00000..chunk_{last} بالترتيب في recording.webm، يحذف
-    الأجزاء بعد نجاح الدمج، ويعيد حجم الملف الناتج بالبايت."""
-    out_path = recording_file_path(session_id)
-    size = 0
+def merge_segment_chunks(session_id: uuid.UUID, segment: int, last_chunk_index: int) -> Path:
+    """يدمج seg_{segment}_chunk_00000..last بالترتيب في seg_{segment}.webm
+    (إلحاق خام صحيح لأنه نفس بث MediaRecorder المتصل)، يحذف أجزاء .part
+    الخاصة بهذا الـsegment بعد النجاح، ويعيد مسار الملف الناتج."""
+    out_path = segment_file_path(session_id, segment)
     with open(out_path, "wb") as out_f:
         for index in range(last_chunk_index + 1):
-            part_path = chunk_file_path(session_id, index)
+            part_path = chunk_file_path(session_id, segment, index)
             with open(part_path, "rb") as in_f:
                 while True:
                     buf = in_f.read(STREAM_READ_SIZE)
                     if not buf:
                         break
                     out_f.write(buf)
-                    size += len(buf)
 
     for index in range(last_chunk_index + 1):
-        chunk_file_path(session_id, index).unlink(missing_ok=True)
+        chunk_file_path(session_id, segment, index).unlink(missing_ok=True)
 
-    return size
+    return out_path
+
+
+def _run_subprocess(args: list[str], *, error_label: str) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(args, capture_output=True, timeout=FFMPEG_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as exc:
+        raise FfmpegError(f"{error_label} انتهت مهلته (timeout) عند تنفيذ: {' '.join(args)}") from exc
+    except OSError as exc:
+        raise FfmpegError(f"{error_label} تعذّر تشغيله: {exc}") from exc
+
+
+def _run_ffmpeg(args: list[str]) -> None:
+    result = _run_subprocess(args, error_label="ffmpeg")
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", errors="replace")
+        raise FfmpegError(f"فشل ffmpeg (rc={result.returncode}) عند تنفيذ: {' '.join(args)}\n{stderr}")
+
+
+def concat_segments(session_id: uuid.UUID, segment_paths: list[Path]) -> Path:
+    """يبني recording.webm النهائي من ملفات الـsegments (كل منها webm سليم
+    داخلياً بفضل merge_segment_chunks) عبر إعادة كبس ffmpeg، ما يمنحه فهارس
+    قفز (cues) ومدة صحيحة في الترويسة. segment واحد فقط → إعادة كبس مباشرة
+    (`-c copy`). أكثر من segment → دمج concat demuxer (`-c copy`)، ومع فشل
+    نادر (اختلاف بارامترات ترميز بين الـsegments) → إعادة محاولة بإعادة ترميز
+    الصوت (`-c:a libopus`). يحذف ملفات الـsegments الوسيطة بعد النجاح فقط."""
+    if not segment_paths:
+        raise FfmpegError("لا توجد segments لدمجها")
+
+    directory = session_media_dir(session_id)
+    out_path = recording_file_path(session_id)
+
+    if len(segment_paths) == 1:
+        _run_ffmpeg(["ffmpeg", "-y", "-i", str(segment_paths[0]), "-c", "copy", str(out_path)])
+    else:
+        concat_list_path = directory / "concat_list.txt"
+        list_content = "\n".join(f"file '{p}'" for p in segment_paths)
+        concat_list_path.write_text(list_content, encoding="utf-8")
+        try:
+            try:
+                _run_ffmpeg(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-f",
+                        "concat",
+                        "-safe",
+                        "0",
+                        "-i",
+                        str(concat_list_path),
+                        "-c",
+                        "copy",
+                        str(out_path),
+                    ]
+                )
+            except FfmpegError:
+                # تعذّر النسخ المباشر (اختلاف نادر في بارامترات الترميز بين
+                # الـsegments) - أعد المحاولة بإعادة ترميز الصوت.
+                _run_ffmpeg(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-f",
+                        "concat",
+                        "-safe",
+                        "0",
+                        "-i",
+                        str(concat_list_path),
+                        "-c:a",
+                        "libopus",
+                        "-b:a",
+                        "48k",
+                        str(out_path),
+                    ]
+                )
+        finally:
+            concat_list_path.unlink(missing_ok=True)
+
+    for p in segment_paths:
+        p.unlink(missing_ok=True)
+
+    return out_path
+
+
+def probe_duration_ms(path: Path) -> int | None:
+    """يقرأ مدة الملف بالميلي ثانية عبر ffprobe. يعيد None إن فشل (استدعاء
+    الطرف - المسؤول عن fallback لقيمة العميل إن وُجدت)."""
+    try:
+        result = _run_subprocess(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(path),
+            ],
+            error_label="ffprobe",
+        )
+    except FfmpegError:
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        seconds = float(result.stdout.decode("utf-8", errors="replace").strip())
+    except ValueError:
+        return None
+    return round(seconds * 1000)
 
 
 def delete_session_media(session_id: uuid.UUID) -> None:
-    """يحذف كل ملفات الجلسة (الأجزاء والتسجيل المدموج إن وُجد)."""
+    """يحذف كل ملفات الجلسة (أجزاء .part وملفات seg_*.webm الوسيطة والتسجيل
+    المدموج النهائي إن وُجد)."""
     directory = session_media_dir(session_id)
     shutil.rmtree(directory, ignore_errors=True)
 

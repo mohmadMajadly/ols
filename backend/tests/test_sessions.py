@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 from app.core.config import settings
@@ -62,7 +63,28 @@ def _create_session(client, student_id, *, session_type="sabq", attendance="hadi
     return client.post("/api/sessions", json=payload)
 
 
-def test_full_session_lifecycle_merges_chunks_in_order_and_cleans_up(client, db_session):
+def _split_bytes(data: bytes, n: int) -> list[bytes]:
+    """يقسّم data إلى n قطعة متتالية بالترتيب (يحاكي chunks MediaRecorder)."""
+    n = max(1, min(n, len(data)))
+    size = len(data) // n
+    parts = [data[i * size : (i + 1) * size] for i in range(n - 1)]
+    parts.append(data[(n - 1) * size :])
+    return parts
+
+
+def _upload_segment(client, session_id, data: bytes, *, segment=0, n=3):
+    """يرفع data كـ n مقاطع (chunks) متتالية على segment معيّن، ويعيد
+    last_chunk_index المستخدم."""
+    parts = _split_bytes(data, n)
+    for index, part in enumerate(parts):
+        resp = client.put(
+            f"/api/sessions/{session_id}/chunks/{index}", content=part, params={"segment": segment}
+        )
+        assert resp.status_code == 204
+    return len(parts) - 1
+
+
+def test_full_session_lifecycle_merges_chunks_in_order_and_cleans_up(client, db_session, make_webm_audio):
     teacher, student = _setup_teacher_with_student(db_session, teacher_username="life_teacher")
     _login(client, "life_teacher", "Password123!")
 
@@ -71,79 +93,187 @@ def test_full_session_lifecycle_merges_chunks_in_order_and_cleans_up(client, db_
     session_id = create_resp.json()["id"]
     assert create_resp.json()["status"] == "recording"
 
-    chunks = [b"AAA", b"BBB", b"CCC"]
-    for index, data in enumerate(chunks):
-        upload_resp = client.put(f"/api/sessions/{session_id}/chunks/{index}", content=data)
-        assert upload_resp.status_code == 204
+    audio = make_webm_audio(1.0)
+    last_index = _upload_segment(client, session_id, audio, segment=0, n=3)
+
+    finalize_resp = client.post(f"/api/sessions/{session_id}/finalize", json={"segments": {"0": last_index}})
+    assert finalize_resp.status_code == 200
+    body = finalize_resp.json()
+    assert body["status"] == "completed"
+    assert body["recording"]["status"] == "ready"
+    assert body["recording"]["size_bytes"] > 0
+    assert body["recording"]["duration_ms"] is not None
+    assert 700 <= body["recording"]["duration_ms"] <= 1300
+
+    media_root = Path(settings.MEDIA_ROOT)
+    session_dir = media_root / "recordings" / session_id
+    recording_path = session_dir / "recording.webm"
+    assert recording_path.exists()
+    assert recording_path.stat().st_size == body["recording"]["size_bytes"]
+    # كل الملفات الوسيطة (parts وseg files) حُذفت، لا يبقى إلا recording.webm
+    assert [p.name for p in session_dir.iterdir()] == ["recording.webm"]
+
+
+def test_chunk_gap_returns_409_with_missing_index_then_succeeds(client, db_session, make_webm_audio):
+    teacher, student = _setup_teacher_with_student(db_session, teacher_username="gap_teacher")
+    _login(client, "gap_teacher", "Password123!")
+    session_id = _create_session(client, student.id).json()["id"]
+
+    audio = make_webm_audio(0.5)
+    parts = _split_bytes(audio, 3)
+    assert client.put(f"/api/sessions/{session_id}/chunks/0", content=parts[0]).status_code == 204
+    assert client.put(f"/api/sessions/{session_id}/chunks/2", content=parts[2]).status_code == 204
+
+    gap_resp = client.post(f"/api/sessions/{session_id}/finalize", json={"segments": {"0": 2}})
+    assert gap_resp.status_code == 409
+    assert gap_resp.json()["detail"]["missing"] == {"0": [1]}
+
+    assert client.put(f"/api/sessions/{session_id}/chunks/1", content=parts[1]).status_code == 204
+    ok_resp = client.post(f"/api/sessions/{session_id}/finalize", json={"segments": {"0": 2}})
+    assert ok_resp.status_code == 200
+    assert ok_resp.json()["status"] == "completed"
+
+
+def test_finalize_gap_in_second_segment_returns_409_naming_segment_and_index(
+    client, db_session, make_webm_audio
+):
+    teacher, student = _setup_teacher_with_student(db_session, teacher_username="gap2_teacher")
+    _login(client, "gap2_teacher", "Password123!")
+    session_id = _create_session(client, student.id).json()["id"]
+
+    seg0_audio = make_webm_audio(0.3, frequency=440)
+    _upload_segment(client, session_id, seg0_audio, segment=0, n=2)
+
+    seg1_audio = make_webm_audio(0.3, frequency=550)
+    seg1_parts = _split_bytes(seg1_audio, 3)
+    assert client.put(
+        f"/api/sessions/{session_id}/chunks/0", content=seg1_parts[0], params={"segment": 1}
+    ).status_code == 204
+    # فهرس 1 مفقود عمداً على segment=1
+    assert client.put(
+        f"/api/sessions/{session_id}/chunks/2", content=seg1_parts[2], params={"segment": 1}
+    ).status_code == 204
+
+    resp = client.post(f"/api/sessions/{session_id}/finalize", json={"segments": {"0": 1, "1": 2}})
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["missing"] == {"1": [1]}
+
+
+def test_finalize_segment_on_disk_not_declared_returns_409(client, db_session, make_webm_audio):
+    teacher, student = _setup_teacher_with_student(db_session, teacher_username="undeclared_teacher")
+    _login(client, "undeclared_teacher", "Password123!")
+    session_id = _create_session(client, student.id).json()["id"]
+
+    seg0_audio = make_webm_audio(0.3)
+    _upload_segment(client, session_id, seg0_audio, segment=0, n=1)
+    seg1_audio = make_webm_audio(0.3, frequency=660)
+    _upload_segment(client, session_id, seg1_audio, segment=1, n=1)
+
+    # segment=1 موجود فعلياً على القرص لكن غير مذكور في الجسم
+    resp = client.post(f"/api/sessions/{session_id}/finalize", json={"segments": {"0": 0}})
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["unexpected_segments"] == [1]
+
+
+def test_finalize_two_segments_real_audio_produces_correct_duration(client, db_session, make_webm_audio):
+    teacher, student = _setup_teacher_with_student(db_session, teacher_username="twoseg_teacher")
+    _login(client, "twoseg_teacher", "Password123!")
+    session_id = _create_session(client, student.id).json()["id"]
+
+    seg0_audio = make_webm_audio(2.0, frequency=440)
+    last0 = _upload_segment(client, session_id, seg0_audio, segment=0, n=3)
+    seg1_audio = make_webm_audio(2.0, frequency=880)
+    last1 = _upload_segment(client, session_id, seg1_audio, segment=1, n=2)
 
     finalize_resp = client.post(
-        f"/api/sessions/{session_id}/finalize", json={"last_chunk_index": 2, "duration_ms": 12345}
+        f"/api/sessions/{session_id}/finalize", json={"segments": {"0": last0, "1": last1}}
     )
     assert finalize_resp.status_code == 200
     body = finalize_resp.json()
     assert body["status"] == "completed"
     assert body["recording"]["status"] == "ready"
-    assert body["recording"]["size_bytes"] == len(b"AAABBBCCC")
+    duration_ms = body["recording"]["duration_ms"]
+    assert duration_ms is not None
+    assert 3500 <= duration_ms <= 4500
 
     media_root = Path(settings.MEDIA_ROOT)
-    session_dir = media_root / "recordings" / session_id
-    recording_path = session_dir / "recording.webm"
-    assert recording_path.read_bytes() == b"AAABBBCCC"
-    assert not any(p.name.startswith("chunk_") for p in session_dir.iterdir())
+    recording_path = media_root / "recordings" / session_id / "recording.webm"
+    assert recording_path.exists()
 
-
-def test_chunk_gap_returns_409_with_missing_index_then_succeeds(client, db_session):
-    teacher, student = _setup_teacher_with_student(db_session, teacher_username="gap_teacher")
-    _login(client, "gap_teacher", "Password123!")
-    session_id = _create_session(client, student.id).json()["id"]
-
-    assert client.put(f"/api/sessions/{session_id}/chunks/0", content=b"AAA").status_code == 204
-    assert client.put(f"/api/sessions/{session_id}/chunks/2", content=b"CCC").status_code == 204
-
-    gap_resp = client.post(
-        f"/api/sessions/{session_id}/finalize", json={"last_chunk_index": 2, "duration_ms": 1000}
+    probe = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(recording_path),
+        ],
+        capture_output=True,
+        timeout=30,
     )
-    assert gap_resp.status_code == 409
-    assert gap_resp.json()["detail"]["missing_indices"] == [1]
+    assert probe.returncode == 0, probe.stderr.decode("utf-8", errors="replace")
+    probed_seconds = float(probe.stdout.decode("utf-8").strip())
+    assert 3.5 <= probed_seconds <= 4.5
 
-    assert client.put(f"/api/sessions/{session_id}/chunks/1", content=b"BBB").status_code == 204
-    ok_resp = client.post(
-        f"/api/sessions/{session_id}/finalize", json={"last_chunk_index": 2, "duration_ms": 1000}
-    )
-    assert ok_resp.status_code == 200
-    assert ok_resp.json()["status"] == "completed"
+    range_resp = client.get(f"/api/sessions/{session_id}/audio", headers={"Range": "bytes=0-99"})
+    assert range_resp.status_code == 206
+    assert range_resp.headers["Accept-Ranges"] == "bytes"
 
 
-def test_chunk_reupload_is_idempotent(client, db_session):
+def test_chunk_reupload_is_idempotent(client, db_session, make_webm_audio):
     teacher, student = _setup_teacher_with_student(db_session, teacher_username="idem_teacher")
     _login(client, "idem_teacher", "Password123!")
     session_id = _create_session(client, student.id).json()["id"]
 
-    client.put(f"/api/sessions/{session_id}/chunks/0", content=b"OLD-DATA")
-    client.put(f"/api/sessions/{session_id}/chunks/0", content=b"NEW")
+    # الرفع الأول بيانات غير صالحة كملف webm (ffmpeg سيرفضها إن بقيت)؛
+    # إعادة الرفع لنفس الفهرس يجب أن تستبدلها بالكامل ببيانات صوت صحيحة -
+    # نجاح finalize لاحقاً هو دليل الاستبدال (لولاه لفشل ffmpeg بخطأ 500).
+    client.put(f"/api/sessions/{session_id}/chunks/0", content=b"OLD-NOT-VALID-WEBM-DATA")
+    audio = make_webm_audio(0.3)
+    client.put(f"/api/sessions/{session_id}/chunks/0", content=audio)
 
-    finalize_resp = client.post(
-        f"/api/sessions/{session_id}/finalize", json={"last_chunk_index": 0, "duration_ms": 10}
-    )
+    finalize_resp = client.post(f"/api/sessions/{session_id}/finalize", json={"segments": {"0": 0}})
     assert finalize_resp.status_code == 200
     media_root = Path(settings.MEDIA_ROOT)
     recording_path = media_root / "recordings" / session_id / "recording.webm"
-    assert recording_path.read_bytes() == b"NEW"
+    assert recording_path.exists()
+    assert recording_path.stat().st_size > 0
 
 
-def test_active_session_reports_uploaded_chunk_indices_for_resume(client, db_session):
+def test_finalize_with_invalid_audio_data_returns_500_and_marks_recording_failed(client, db_session):
+    teacher, student = _setup_teacher_with_student(db_session, teacher_username="badaudio_teacher")
+    _login(client, "badaudio_teacher", "Password123!")
+    session_id = _create_session(client, student.id).json()["id"]
+
+    # بيانات غير صالحة كملف webm إطلاقاً - ffmpeg سيرفض فتحها كمدخل.
+    client.put(f"/api/sessions/{session_id}/chunks/0", content=b"NOT-A-VALID-WEBM-FILE-AT-ALL")
+
+    resp = client.post(f"/api/sessions/{session_id}/finalize", json={"segments": {"0": 0}})
+    assert resp.status_code == 500
+    assert "detail" in resp.json()
+
+    # الجلسة تبقى قيد التسجيل (finalize لم يُنهِها)، لكن التسجيل يُعلَّم فاشلاً.
+    detail = client.get(f"/api/sessions/{session_id}").json()
+    assert detail["recording"]["status"] == "failed"
+
+
+def test_active_session_reports_uploaded_indices_by_segment_for_resume(client, db_session):
     teacher, student = _setup_teacher_with_student(db_session, teacher_username="resume_teacher")
     _login(client, "resume_teacher", "Password123!")
     session_id = _create_session(client, student.id).json()["id"]
 
-    client.put(f"/api/sessions/{session_id}/chunks/0", content=b"AAA")
-    client.put(f"/api/sessions/{session_id}/chunks/1", content=b"BBB")
+    client.put(f"/api/sessions/{session_id}/chunks/0", content=b"AAA", params={"segment": 0})
+    client.put(f"/api/sessions/{session_id}/chunks/1", content=b"BBB", params={"segment": 0})
+    client.put(f"/api/sessions/{session_id}/chunks/0", content=b"CCC", params={"segment": 1})
 
     active_resp = client.get("/api/sessions/active")
     assert active_resp.status_code == 200
     body = active_resp.json()
     assert body["session"]["id"] == session_id
-    assert sorted(body["uploaded_chunk_indices"]) == [0, 1]
+    assert body["uploaded"] == {"0": [0, 1], "1": [0]}
 
 
 def test_cannot_create_second_recording_session_for_same_teacher(client, db_session):
@@ -214,23 +344,23 @@ def test_student_role_forbidden_on_sessions_endpoints(client, db_session):
     assert client.get("/api/sessions/active").status_code == 403
 
 
-def test_audio_range_request_returns_206_with_correct_bytes(client, db_session):
+def test_audio_range_request_returns_206_with_correct_bytes(client, db_session, make_webm_audio):
     teacher, student = _setup_teacher_with_student(db_session, teacher_username="stream_teacher")
     _login(client, "stream_teacher", "Password123!")
     session_id = _create_session(client, student.id).json()["id"]
 
-    client.put(f"/api/sessions/{session_id}/chunks/0", content=b"0123456789")
-    finalize_resp = client.post(
-        f"/api/sessions/{session_id}/finalize", json={"last_chunk_index": 0, "duration_ms": 500}
-    )
+    audio = make_webm_audio(0.5)
+    client.put(f"/api/sessions/{session_id}/chunks/0", content=audio)
+    finalize_resp = client.post(f"/api/sessions/{session_id}/finalize", json={"segments": {"0": 0}})
     assert finalize_resp.status_code == 200
 
     full_resp = client.get(f"/api/sessions/{session_id}/audio")
     assert full_resp.status_code == 200
-    assert full_resp.content == b"0123456789"
+    full_content = full_resp.content
+    assert len(full_content) > 20
 
     range_resp = client.get(f"/api/sessions/{session_id}/audio", headers={"Range": "bytes=2-5"})
     assert range_resp.status_code == 206
-    assert range_resp.headers["Content-Range"] == "bytes 2-5/10"
+    assert range_resp.headers["Content-Range"] == f"bytes 2-5/{len(full_content)}"
     assert range_resp.headers["Accept-Ranges"] == "bytes"
-    assert range_resp.content == b"2345"
+    assert range_resp.content == full_content[2:6]
