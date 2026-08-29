@@ -194,6 +194,41 @@ export function IconArrowDown(props: IconProps) {
   )
 }
 
+export function IconPlay(props: IconProps) {
+  return (
+    <svg {...base} fill="currentColor" stroke="none" {...props}>
+      <path d="M7.5 4.8c0-.98 1.06-1.6 1.92-1.11l10.2 5.83a1.27 1.27 0 0 1 0 2.2L9.42 17.55c-.86.49-1.92-.13-1.92-1.11V4.8Z" />
+    </svg>
+  )
+}
+
+export function IconPause(props: IconProps) {
+  return (
+    <svg {...base} fill="currentColor" stroke="none" {...props}>
+      <rect x="6.5" y="4.5" width="4" height="15" rx="1.3" />
+      <rect x="13.5" y="4.5" width="4" height="15" rx="1.3" />
+    </svg>
+  )
+}
+
+export function IconSkipBack(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M17.5 6 10 12l7.5 6V6Z" fill="currentColor" stroke="none" />
+      <path d="M6.5 6v12" />
+    </svg>
+  )
+}
+
+export function IconSkipForward(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M6.5 6 14 12l-7.5 6V6Z" fill="currentColor" stroke="none" />
+      <path d="M17.5 6v12" />
+    </svg>
+  )
+}
+
 export function IconLogout(props: IconProps) {
   return (
     <svg {...base} {...props}>

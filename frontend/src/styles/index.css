@@ -38,6 +38,14 @@
   --khata-dabt: #6B4A8E;
   --waqf: #33667A;
 
+  /* ألوان الرسوم البيانية — نسخة من الألوان الدلالية للسلاسل في المخططات حصراً
+     (docs/design/DIRECTION.md، قسم «ألوان الرسوم البيانية»، مدققة CVD/تباين/إشباع) */
+  --chart-hifz: #A93B2E;
+  --chart-tajwid: #B58312;
+  --chart-dabt: #5E3D85;
+  --chart-waqf: #2E8FB8;
+  --chart-sahih: #257A47;
+
   /* حواف وظلال */
   --radius-card-value: 8px;
   --radius-control-value: 6px;
@@ -67,6 +75,12 @@
   --color-khata-tajwid: var(--khata-tajwid);
   --color-khata-dabt: var(--khata-dabt);
   --color-waqf: var(--waqf);
+
+  --color-chart-hifz: var(--chart-hifz);
+  --color-chart-tajwid: var(--chart-tajwid);
+  --color-chart-dabt: var(--chart-dabt);
+  --color-chart-waqf: var(--chart-waqf);
+  --color-chart-sahih: var(--chart-sahih);
 
   /* خطوط */
   --font-display: "Amiri", serif;

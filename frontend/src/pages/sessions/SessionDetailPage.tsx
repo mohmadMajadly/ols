@@ -1,16 +1,21 @@
-// /sessions/:id — تفاصيل الجلسة: بيانات الجلسة، مشغّل صوتي بسيط، وقائمة الملاحظات
-// مرتبة زمنياً بطوابعها mm:ss (خط mono). الدرجة قابلة للتعديل هنا عبر PATCH.
+// /sessions/:id — تفاصيل الجلسة: بيانات الجلسة، المشغّل الموجي (التوقيع البصري الأساسي
+// للمنصة، DIRECTION.md §5)، وقائمة الملاحظات مرتبة زمنياً قابلة للتعديل/الحذف. الدرجة
+// والملخص قابلان للتعديل هنا عبر PATCH.
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 
 import { ApiError } from '../../api/client'
+import type { NoteUpdateInput } from '../../api/notes'
+import { deleteNote, updateNote } from '../../api/notes'
+import { fetchSurahs } from '../../api/quran'
+import type { SessionUpdateInput } from '../../api/sessions'
 import { fetchSession, updateSession } from '../../api/sessions'
 import { fetchTaxonomy } from '../../api/taxonomy'
 import { formatDualDate } from '../../lib/date'
 import { formatDuration } from '../../lib/formatDuration'
-import { noteBadgeVariant } from '../../lib/noteColors'
+import { noteBadgeVariant, noteChartColorVar, noteSolidDotClass } from '../../lib/noteColors'
 import {
   attendanceLabels,
   correctionModeLabels,
@@ -18,23 +23,30 @@ import {
   sessionTypeLabels,
   severityLabels,
 } from '../../lib/sessionLabels'
+import { buildSurahNameMap, surahLabel } from '../../lib/surahName'
 import { AyahChip } from '../../ui/AyahChip'
 import { Badge } from '../../ui/Badge'
 import type { BadgeVariant } from '../../ui/Badge'
 import { Button } from '../../ui/Button'
 import { Card } from '../../ui/Card'
 import { EmptyState } from '../../ui/EmptyState'
-import { fieldBaseClasses } from '../../ui/fieldStyles'
+import { Modal } from '../../ui/Modal'
 import { PageHeader } from '../../ui/PageHeader'
 import { Spinner } from '../../ui/Spinner'
-import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '../../ui/Table'
 import { useToast } from '../../ui/Toast'
-import { cx } from '../../ui/utils'
+import { cx, prefersReducedMotion } from '../../ui/utils'
+import { GradeEditModal } from './GradeEditModal'
+import { NoteEditModal } from './NoteEditModal'
+import type { WaveformBead, WaveformPlayerHandle } from './WaveformPlayer'
+import { WaveformPlayer } from './WaveformPlayer'
 
 const STATUS_BADGE: Record<string, BadgeVariant> = { recording: 'lazward', completed: 'sahih', cancelled: 'neutral' }
 
+const HIGHLIGHT_MS = 1600
+
 export function SessionDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const toast = useToast()
 
@@ -44,25 +56,62 @@ export function SessionDetailPage() {
     enabled: Boolean(id),
   })
   const taxonomyQuery = useQuery({ queryKey: ['taxonomy'], queryFn: fetchTaxonomy })
+  const surahsQuery = useQuery({ queryKey: ['quran', 'surahs'], queryFn: fetchSurahs, staleTime: Infinity })
 
   const categoryById = new Map((taxonomyQuery.data?.categories ?? []).map((c) => [c.id, c] as const))
   const subtypeById = new Map(
     (taxonomyQuery.data?.categories ?? []).flatMap((c) => c.subtypes.map((s) => [s.id, s] as const)),
   )
+  const fieldById = new Map((taxonomyQuery.data?.fields ?? []).map((f) => [f.id, f] as const))
+  const surahNames = buildSurahNameMap(surahsQuery.data ?? [])
 
-  const [editingGrade, setEditingGrade] = useState(false)
-  const [gradeValue, setGradeValue] = useState('')
+  const playerRef = useRef<WaveformPlayerHandle>(null)
+  const noteRefs = useRef<Map<string, HTMLLIElement>>(new Map())
+  const highlightTimer = useRef<number | null>(null)
+
+  const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(null)
+  const [gradeModalOpen, setGradeModalOpen] = useState(false)
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null)
 
   const gradeMutation = useMutation({
-    mutationFn: (grade: number) => updateSession(id as string, { grade }),
+    mutationFn: (payload: SessionUpdateInput) => updateSession(id as string, payload),
     onSuccess: (updated) => {
       queryClient.setQueryData(['sessions', id], updated)
       queryClient.invalidateQueries({ queryKey: ['sessions', 'list'] })
-      setEditingGrade(false)
-      toast.show('تم تحديث الدرجة')
+      setGradeModalOpen(false)
+      toast.show('تم حفظ التقييم')
     },
     onError: (error: unknown) => {
-      toast.show(error instanceof ApiError ? error.detail : 'تعذّر تحديث الدرجة', 'error')
+      toast.show(error instanceof ApiError ? error.detail : 'تعذّر حفظ التقييم', 'error')
+    },
+  })
+
+  const noteUpdateMutation = useMutation({
+    mutationFn: ({ noteId, payload }: { noteId: string; payload: NoteUpdateInput }) => updateNote(noteId, payload),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['sessions', id], (current: typeof sessionQuery.data) =>
+        current ? { ...current, notes: current.notes.map((n) => (n.id === updated.id ? updated : n)) } : current,
+      )
+      setEditingNoteId(null)
+      toast.show('تم حفظ الملاحظة')
+    },
+    onError: (error: unknown) => {
+      toast.show(error instanceof ApiError ? error.detail : 'تعذّر حفظ الملاحظة', 'error')
+    },
+  })
+
+  const noteDeleteMutation = useMutation({
+    mutationFn: (noteId: string) => deleteNote(noteId),
+    onSuccess: (_void, noteId) => {
+      queryClient.setQueryData(['sessions', id], (current: typeof sessionQuery.data) =>
+        current ? { ...current, notes: current.notes.filter((n) => n.id !== noteId) } : current,
+      )
+      setDeletingNoteId(null)
+      toast.show('تم حذف الملاحظة')
+    },
+    onError: (error: unknown) => {
+      toast.show(error instanceof ApiError ? error.detail : 'تعذّر حذف الملاحظة', 'error')
     },
   })
 
@@ -86,12 +135,56 @@ export function SessionDetailPage() {
 
   const hasRange = session.range_start_surah != null && session.range_end_surah != null
   const sortedNotes = [...session.notes].sort((a, b) => (a.timestamp_ms ?? -1) - (b.timestamp_ms ?? -1))
+  const editingNote = editingNoteId ? (session.notes.find((n) => n.id === editingNoteId) ?? null) : null
+  const deletingNote = deletingNoteId ? (session.notes.find((n) => n.id === deletingNoteId) ?? null) : null
 
-  function startEditGrade() {
-    setGradeValue(
-      session!.grade != null ? String(session!.grade) : session!.suggested_grade != null ? String(session!.suggested_grade) : '',
+  const beads: WaveformBead[] = sortedNotes
+    .filter((n) => n.timestamp_ms != null)
+    .map((n) => {
+      const category = categoryById.get(n.category_id)
+      return {
+        id: n.id,
+        timestampMs: n.timestamp_ms as number,
+        color: noteChartColorVar(category?.color ?? 'neutral'),
+        label: category?.name ?? 'ملاحظة',
+      }
+    })
+
+  function handleBeadClick(noteId: string) {
+    setHighlightedNoteId(noteId)
+    const el = noteRefs.current.get(noteId)
+    el?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'center' })
+    if (highlightTimer.current != null) window.clearTimeout(highlightTimer.current)
+    highlightTimer.current = window.setTimeout(() => setHighlightedNoteId((current) => (current === noteId ? null : current)), HIGHLIGHT_MS)
+  }
+
+  function renderRecordingArea() {
+    if (session!.attendance === 'ghaib') {
+      return <EmptyState message="الطالب غائب في هذه الجلسة — لا تسجيل صوتي" />
+    }
+    const recording = session!.recording
+    if (!recording) {
+      return <EmptyState message="لا تسجيل صوتي لهذه الجلسة" />
+    }
+    if (recording.status === 'uploading') {
+      return <EmptyState message="التسجيل قيد المعالجة، يرجى المحاولة لاحقاً" />
+    }
+    if (recording.status === 'failed') {
+      return <EmptyState message="تعذّرت معالجة التسجيل الصوتي لهذه الجلسة" />
+    }
+    if (recording.status !== 'ready' || recording.duration_ms == null) {
+      return <EmptyState message="المشغّل الصوتي غير متاح حالياً" />
+    }
+    return (
+      <WaveformPlayer
+        ref={playerRef}
+        sessionId={session!.id}
+        waveform={recording.waveform}
+        durationMs={recording.duration_ms}
+        beads={beads}
+        onBeadClick={handleBeadClick}
+      />
     )
-    setEditingGrade(true)
   }
 
   return (
@@ -99,10 +192,16 @@ export function SessionDetailPage() {
       <PageHeader
         title={session.student_name}
         description={`${sessionTypeLabels[session.session_type]} — ${formatDualDate(session.started_at)}`}
+        actions={
+          <Button variant="secondary" onClick={() => navigate(`/students/${session.student_id}`)}>
+            ملف الطالب
+          </Button>
+        }
       />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2">
+      <div className="mb-6 grid gap-4 lg:grid-cols-2">
         <Card>
+          <h2 className="mb-3 text-sm font-semibold text-hibr">بطاقة الجلسة</h2>
           <dl className="flex flex-col gap-3 text-sm">
             <div className="flex items-center justify-between">
               <dt className="text-hibr-2">الحالة</dt>
@@ -119,9 +218,15 @@ export function SessionDetailPage() {
               <dd>
                 {hasRange ? (
                   <span className="flex items-center gap-1">
-                    <AyahChip surah={String(session.range_start_surah)} ayah={session.range_start_ayah as number} />
+                    <AyahChip
+                      surah={surahLabel(surahNames, session.range_start_surah as number)}
+                      ayah={session.range_start_ayah as number}
+                    />
                     <span className="text-hibr-3">—</span>
-                    <AyahChip surah={String(session.range_end_surah)} ayah={session.range_end_ayah as number} />
+                    <AyahChip
+                      surah={surahLabel(surahNames, session.range_end_surah as number)}
+                      ayah={session.range_end_ayah as number}
+                    />
                   </span>
                 ) : (
                   '—'
@@ -136,60 +241,31 @@ export function SessionDetailPage() {
             </div>
             <div className="flex items-center justify-between">
               <dt className="text-hibr-2">عدد الملاحظات</dt>
-              <dd className="text-hibr">{session.notes.length}</dd>
-            </div>
-            <div className="flex items-center justify-between">
-              <dt className="text-hibr-2">الدرجة</dt>
-              <dd>
-                {editingGrade ? (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step="0.5"
-                      aria-label="الدرجة"
-                      value={gradeValue}
-                      onChange={(event) => setGradeValue(event.target.value)}
-                      className={cx(fieldBaseClasses, 'h-9 w-20 px-2 text-base')}
-                    />
-                    <Button
-                      size="sm"
-                      loading={gradeMutation.isPending}
-                      onClick={() => gradeValue !== '' && gradeMutation.mutate(Number(gradeValue))}
-                    >
-                      حفظ
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setEditingGrade(false)}>
-                      إلغاء
-                    </Button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={startEditGrade} className="text-lazward-700 hover:underline">
-                    {session.grade != null
-                      ? session.grade
-                      : session.suggested_grade != null
-                        ? `${session.suggested_grade} (مقترحة)`
-                        : 'تحديد الدرجة'}
-                  </button>
-                )}
-              </dd>
+              <dd className="font-time tabular-nums text-hibr">{session.notes.length}</dd>
             </div>
           </dl>
         </Card>
 
         <Card>
-          <h2 className="mb-2 text-sm font-semibold text-hibr">التسجيل الصوتي</h2>
-          {session.recording?.status === 'ready' ? (
-            // eslint-disable-next-line jsx-a11y/media-has-caption
-            <audio controls className="w-full" src={`/api/sessions/${session.id}/audio`}>
-              متصفحك لا يدعم تشغيل الصوت.
-            </audio>
-          ) : (
-            <EmptyState message="المشغّل الصوتي قيد الإنشاء" />
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-hibr">بطاقة التقييم</h2>
+            {session.status === 'completed' && (
+              <Button size="sm" variant="ghost" onClick={() => setGradeModalOpen(true)}>
+                تعديل
+              </Button>
+            )}
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-time text-3xl tabular-nums text-hibr">
+              {session.grade ?? session.suggested_grade ?? '—'}
+            </span>
+            <span className="text-sm text-hibr-2">من 100</span>
+          </div>
+          {session.grade != null && session.suggested_grade != null && session.grade !== session.suggested_grade && (
+            <p className="mt-1 text-sm text-hibr-2">المقترحة: {session.suggested_grade}</p>
           )}
           {session.summary && (
-            <div className="mt-4">
+            <div className="mt-4 border-t border-khatt pt-3">
               <h3 className="mb-1 text-sm font-semibold text-hibr">ملخص الجلسة</h3>
               <p className="text-sm text-hibr-2">{session.summary}</p>
             </div>
@@ -197,49 +273,126 @@ export function SessionDetailPage() {
         </Card>
       </div>
 
+      <Card className="mb-6" data-testid="recording-card">
+        <h2 className="mb-4 font-display text-xl text-hibr">التسجيل الصوتي</h2>
+        {renderRecordingArea()}
+      </Card>
+
       <h2 className="mb-3 font-display text-xl text-hibr">الملاحظات</h2>
       {sortedNotes.length === 0 ? (
         <EmptyState message="لا ملاحظات في هذه الجلسة" />
       ) : (
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableHeaderCell>الوقت</TableHeaderCell>
-              <TableHeaderCell>الفئة</TableHeaderCell>
-              <TableHeaderCell>النوع الفرعي</TableHeaderCell>
-              <TableHeaderCell>التصحيح</TableHeaderCell>
-              <TableHeaderCell>الشدة</TableHeaderCell>
-              <TableHeaderCell>الموضع</TableHeaderCell>
-              <TableHeaderCell>ملاحظة</TableHeaderCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {sortedNotes.map((note) => {
-              const category = categoryById.get(note.category_id)
-              const subtype = note.subtype_id ? subtypeById.get(note.subtype_id) : undefined
-              return (
-                <TableRow key={note.id}>
-                  <TableCell className="font-time tabular-nums">
-                    {note.timestamp_ms != null ? formatDuration(note.timestamp_ms) : '—'}
-                  </TableCell>
-                  <TableCell>
-                    {category ? <Badge variant={noteBadgeVariant(category.color)}>{category.name}</Badge> : '—'}
-                  </TableCell>
-                  <TableCell>{subtype?.name ?? '—'}</TableCell>
-                  <TableCell>{note.correction_mode ? correctionModeLabels[note.correction_mode] : '—'}</TableCell>
-                  <TableCell>{note.severity ? severityLabels[note.severity] : '—'}</TableCell>
-                  <TableCell>
-                    {note.surah != null && note.ayah != null ? <AyahChip surah={String(note.surah)} ayah={note.ayah} /> : '—'}
-                  </TableCell>
-                  <TableCell className="max-w-[220px] truncate" title={note.text ?? undefined}>
-                    {note.text ?? '—'}
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
+        <ul className="flex flex-col rounded-card border border-khatt bg-waraq-raised">
+          {sortedNotes.map((note) => {
+            const category = categoryById.get(note.category_id)
+            const subtype = note.subtype_id ? subtypeById.get(note.subtype_id) : undefined
+            const extraEntries = Object.entries(note.extra ?? {}).filter(
+              ([, v]) => v !== undefined && v !== null && v !== '',
+            )
+            return (
+              <li
+                key={note.id}
+                ref={(el) => {
+                  if (el) noteRefs.current.set(note.id, el)
+                  else noteRefs.current.delete(note.id)
+                }}
+                data-testid="note-row"
+                data-note-id={note.id}
+                className={cx(
+                  'flex flex-col gap-2 border-b border-khatt px-4 py-3 transition-colors duration-700 last:border-b-0',
+                  highlightedNoteId === note.id && 'bg-lazward-100',
+                )}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  {note.timestamp_ms != null ? (
+                    <button
+                      type="button"
+                      onClick={() => playerRef.current?.seekMs(note.timestamp_ms as number)}
+                      className="font-time text-sm tabular-nums text-lazward-700 hover:underline"
+                    >
+                      {formatDuration(note.timestamp_ms)}
+                    </button>
+                  ) : (
+                    <span className="font-time text-sm tabular-nums text-hibr-3">—</span>
+                  )}
+                  <span className={cx('h-2 w-2 rounded-full', noteSolidDotClass(category?.color ?? 'neutral'))} aria-hidden="true" />
+                  {category && <Badge variant={noteBadgeVariant(category.color)}>{category.name}</Badge>}
+                  {subtype && <span className="text-sm text-hibr-2">{subtype.name}</span>}
+                  {note.correction_mode && <Badge variant="neutral">{correctionModeLabels[note.correction_mode]}</Badge>}
+                  {note.severity && <Badge variant="neutral">{severityLabels[note.severity]}</Badge>}
+                  {note.surah != null && note.ayah != null && (
+                    <AyahChip surah={surahLabel(surahNames, note.surah)} ayah={note.ayah} />
+                  )}
+                  <div className="ms-auto flex items-center gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => setEditingNoteId(note.id)}>
+                      تعديل
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setDeletingNoteId(note.id)}>
+                      حذف
+                    </Button>
+                  </div>
+                </div>
+                {note.text && <p className="text-sm text-hibr">{note.text}</p>}
+                {extraEntries.length > 0 && (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-hibr-2">
+                    {extraEntries.map(([fieldId, value]) => {
+                      const field = fieldById.get(fieldId)
+                      if (!field) return null
+                      return (
+                        <span key={fieldId}>
+                          {field.name}: <span className="text-hibr">{String(value)}</span>
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
       )}
+
+      {taxonomyQuery.data && (
+        <NoteEditModal
+          note={editingNote}
+          taxonomy={taxonomyQuery.data}
+          surahs={surahsQuery.data ?? []}
+          onClose={() => setEditingNoteId(null)}
+          submitting={noteUpdateMutation.isPending}
+          onSubmit={(payload) => editingNoteId && noteUpdateMutation.mutate({ noteId: editingNoteId, payload })}
+        />
+      )}
+
+      <GradeEditModal
+        open={gradeModalOpen}
+        initialGrade={session.grade}
+        initialSummary={session.summary}
+        submitting={gradeMutation.isPending}
+        onClose={() => setGradeModalOpen(false)}
+        onSubmit={(payload) => gradeMutation.mutate(payload)}
+      />
+
+      <Modal
+        open={Boolean(deletingNote)}
+        onClose={() => setDeletingNoteId(null)}
+        title="حذف الملاحظة"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeletingNoteId(null)}>
+              إلغاء
+            </Button>
+            <Button
+              variant="danger"
+              loading={noteDeleteMutation.isPending}
+              onClick={() => deletingNoteId && noteDeleteMutation.mutate(deletingNoteId)}
+            >
+              حذف الملاحظة
+            </Button>
+          </>
+        }
+      >
+        <p className="text-hibr-2">لا يمكن التراجع عن حذف هذه الملاحظة. هل تريد المتابعة؟</p>
+      </Modal>
     </div>
   )
 }

@@ -3,7 +3,7 @@
 // شاشة الجلسة الحية.
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { ApiError } from '../../api/client'
@@ -28,7 +28,16 @@ interface RangeState {
 
 const EMPTY_RANGE: RangeState = { surah: '', ayah: '' }
 
-export function SessionSetupModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function SessionSetupModal({
+  open,
+  onClose,
+  initialStudentId,
+}: {
+  open: boolean
+  onClose: () => void
+  /** طالب مُحدَّد مسبقاً (قادم من ?student_id= في /sessions — انظر ملف الطالب) */
+  initialStudentId?: string
+}) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const toast = useToast()
@@ -47,6 +56,14 @@ export function SessionSetupModal({ open, onClose }: { open: boolean; onClose: (
   const [end, setEnd] = useState<RangeState>(EMPTY_RANGE)
   const [studentError, setStudentError] = useState<string | undefined>()
   const [rangeError, setRangeError] = useState<string | undefined>()
+
+  // الطالب المُحدَّد مسبقاً يُضبط بعد وصول قائمة الطلاب كي يلتقط SearchSelect تسميته
+  // فوراً (لا فائدة من ضبط القيمة قبل توفر الخيارات المطابقة لها).
+  useEffect(() => {
+    if (open && initialStudentId && studentsQuery.data) {
+      setStudentId(initialStudentId)
+    }
+  }, [open, initialStudentId, studentsQuery.data])
 
   const surahs = surahsQuery.data ?? []
   const surahOptions = surahs.map((s) => ({ value: String(s.number), label: `${s.number}. ${s.name}` }))

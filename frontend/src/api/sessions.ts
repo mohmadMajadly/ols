@@ -14,6 +14,8 @@ export interface RecordingOut {
   mime_type: string
   duration_ms: number | null
   size_bytes: number | null
+  /** مصفوفة ≤800 قيمة 0..100 لرسم الشكل الموجي — null إن فشل توليدها بعد الدمج. */
+  waveform: number[] | null
 }
 
 export interface SessionListItem {

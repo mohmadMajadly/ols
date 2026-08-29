@@ -2,8 +2,8 @@
 // فلاتر (طالب/نوع/فترة)، وجدول الجلسات. النقر على صف ينقل إلى تفاصيل الجلسة.
 
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import type { SessionStatus, SessionType } from '../../api/sessions'
 import { fetchActiveSession, fetchSessions } from '../../api/sessions'
@@ -39,6 +39,10 @@ const STATUS_BADGE: Record<SessionStatus, BadgeVariant> = {
 
 export function SessionsPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  // قادم من ملف الطالب (زر «بدء جلسة تسميع» يمرّر ?student_id=) — يفتح نافذة الإعداد
+  // تلقائياً مع الطالب محدداً مسبقاً؛ أصغر تعديل ممكن هنا (WP5b).
+  const preselectedStudentId = searchParams.get('student_id') ?? undefined
 
   const activeQuery = useQuery({ queryKey: ['sessions', 'active'], queryFn: fetchActiveSession })
   const studentsQuery = useQuery({ queryKey: ['students', { include_inactive: true }], queryFn: () => fetchStudents({ include_inactive: true }) })
@@ -48,6 +52,10 @@ export function SessionsPage() {
   const [fromFilter, setFromFilter] = useState('')
   const [toFilter, setToFilter] = useState('')
   const [setupOpen, setSetupOpen] = useState(false)
+
+  useEffect(() => {
+    if (preselectedStudentId) setSetupOpen(true)
+  }, [preselectedStudentId])
 
   const sessionsQuery = useQuery({
     queryKey: [
@@ -185,7 +193,7 @@ export function SessionsPage() {
         </Table>
       )}
 
-      <SessionSetupModal open={setupOpen} onClose={() => setSetupOpen(false)} />
+      <SessionSetupModal open={setupOpen} onClose={() => setSetupOpen(false)} initialStudentId={preselectedStudentId} />
     </div>
   )
 }

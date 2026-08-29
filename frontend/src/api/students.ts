@@ -61,3 +61,56 @@ export function createStudent(payload: StudentCreateInput): Promise<Student> {
 export function updateStudent(id: string, payload: StudentUpdateInput): Promise<Student> {
   return apiClient.patch<Student>(`/students/${id}`, payload)
 }
+
+// ---- إحصائيات الطالب — GET /students/{id}/stats ----
+
+export interface StudentTotals {
+  sessions: number
+  notes: number
+  total_recorded_ms: number
+  avg_grade: number | null
+  attendance_rate: number | null
+}
+
+export interface GradeTrendPoint {
+  session_id: string
+  date: string
+  grade: number
+  session_type: string
+}
+
+export interface CategoryCount {
+  category_id: string
+  name: string
+  color: string
+  count: number
+}
+
+export interface SubtypeCount {
+  subtype_id: string
+  name: string
+  category_name: string
+  color: string
+  count: number
+}
+
+export interface RepeatedMistake {
+  surah: number
+  surah_name: string
+  ayah: number
+  count: number
+  categories: string[]
+}
+
+export interface StudentStats {
+  totals: StudentTotals
+  grades_trend: GradeTrendPoint[]
+  errors_by_category: CategoryCount[]
+  top_subtypes: SubtypeCount[]
+  sessions_by_type: Record<string, number>
+  repeated_mistakes: RepeatedMistake[]
+}
+
+export function fetchStudentStats(id: string): Promise<StudentStats> {
+  return apiClient.get<StudentStats>(`/students/${id}/stats`)
+}

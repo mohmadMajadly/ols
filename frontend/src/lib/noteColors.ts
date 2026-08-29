@@ -35,6 +35,17 @@ const SOLID_DOT: Record<NoteColorKey, string> = {
   neutral: 'bg-nur/70',
 }
 
+/** توكن لون الرسم البياني (--chart-*) — للاستخدام في fill/style الديناميكي داخل SVG
+ * (لا يمكن لـ Tailwind توليد صنف ثابت لقيمة ديناميكية، فنمرر var() كسلسلة نصية). */
+const CHART_VAR: Record<NoteColorKey, string> = {
+  hifz: 'var(--chart-hifz)',
+  tajwid: 'var(--chart-tajwid)',
+  dabt: 'var(--chart-dabt)',
+  waqf: 'var(--chart-waqf)',
+  sahih: 'var(--chart-sahih)',
+  neutral: 'var(--hibr-3)',
+}
+
 function key(color: string): NoteColorKey {
   return (color in LAZWARD_ACCENT ? color : 'neutral') as NoteColorKey
 }
@@ -49,4 +60,8 @@ export function noteLazwardAccentClasses(color: string): string {
 
 export function noteSolidDotClass(color: string): string {
   return SOLID_DOT[key(color)]
+}
+
+export function noteChartColorVar(color: string): string {
+  return CHART_VAR[key(color)]
 }
