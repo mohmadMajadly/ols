@@ -9,6 +9,7 @@ import { DevMushafPage } from './pages/DevMushafPage'
 import { GroupsPage } from './pages/GroupsPage'
 import { LiveSessionPage } from './pages/live/LiveSessionPage'
 import LoginPage from './pages/LoginPage'
+import { MushafBrowsePage } from './pages/MushafBrowsePage'
 import { SettingsPage } from './pages/settings/SettingsPage'
 import { SessionDetailPage } from './pages/sessions/SessionDetailPage'
 import { SessionsPage } from './pages/sessions/SessionsPage'
@@ -148,6 +149,10 @@ export default function AppRoutes() {
             </RoleGuard>
           }
         />
+
+        {/* المصحف (WP9b): بيانات مصحف عامة غير حساسة — متاحة لكل الأدوار المسجَّلة بمن فيهم
+            الطالب، لذا بلا RoleGuard (ProtectedRoute في المسار الأب كافٍ). */}
+        <Route path="mushaf" element={<MushafBrowsePage />} />
 
         {/* بوابة الطالب (WP8): للطالب فقط — أي دور آخر يُعاد توجيهه إلى "/". */}
         <Route

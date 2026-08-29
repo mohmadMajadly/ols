@@ -8,6 +8,7 @@ import type { UserRole } from '../auth/AuthContext'
 import { roleLabels, useAuth } from '../auth/AuthContext'
 import { Button } from '../ui/Button'
 import {
+  IconBook,
   IconCircles,
   IconDashboard,
   IconLogout,
@@ -24,14 +25,16 @@ const NAV_ITEMS: Array<{ to: string; label: string; icon: typeof IconDashboard; 
   { to: '/students', label: 'الطلاب', icon: IconStudents, end: false },
   { to: '/groups', label: 'الحلقات', icon: IconCircles, end: false },
   { to: '/sessions', label: 'الجلسات', icon: IconSessions, end: false },
+  { to: '/mushaf', label: 'المصحف', icon: IconBook, end: false },
   { to: '/users', label: 'المستخدمون', icon: IconUser, end: false, roles: ['admin'] },
   { to: '/settings', label: 'الإعدادات', icon: IconSettings, end: false, roles: ['admin', 'supervisor'] },
 ]
 
-// بوابة الطالب (WP8): بندان فقط — «صفحتي» هنا و«تسجيل الخروج» أسفل الشريط (لا لوحة
+// بوابة الطالب (WP8): «صفحتي» و«المصحف» (WP9b) و«تسجيل الخروج» أسفل الشريط (لا لوحة
 // تحكم، لا طلاب، لا إعدادات).
 const STUDENT_NAV_ITEMS: Array<{ to: string; label: string; icon: typeof IconDashboard; end: boolean }> = [
   { to: '/me', label: 'صفحتي', icon: IconUser, end: true },
+  { to: '/mushaf', label: 'المصحف', icon: IconBook, end: false },
 ]
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {

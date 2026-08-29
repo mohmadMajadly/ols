@@ -14,19 +14,23 @@ import type { Attendance, SessionDetail } from '../../api/sessions'
 import { fetchActiveSession, fetchSession } from '../../api/sessions'
 import type { NoteCategory } from '../../api/taxonomy'
 import { fetchTaxonomy } from '../../api/taxonomy'
+import { formatDuration } from '../../lib/formatDuration'
+import { useMediaQuery } from '../../lib/useMediaQuery'
 import { noteLazwardAccentClasses } from '../../lib/noteColors'
 import { attendanceLabels, sessionTypeLabels } from '../../lib/sessionLabels'
+import type { MushafControlHandle } from '../../mushaf/MushafPage'
 import { useSessionRecorder } from '../../session/useSessionRecorder'
 import { AyahChip } from '../../ui/AyahChip'
 import { BottomSheet } from '../../ui/BottomSheet'
 import { Button } from '../../ui/Button'
-import { IconAlertCircle, IconMic } from '../../ui/icons'
+import { IconAlertCircle, IconBook, IconMic } from '../../ui/icons'
 import { Modal } from '../../ui/Modal'
 import { Select } from '../../ui/Select'
 import { Spinner } from '../../ui/Spinner'
 import { TextArea } from '../../ui/TextArea'
 import { useToast } from '../../ui/Toast'
 import { cx } from '../../ui/utils'
+import { MushafPanel } from './MushafPanel'
 import type { NoteFormState } from './NoteSheetContent'
 import { NoteSheetContent } from './NoteSheetContent'
 import { RecordingRing } from './RecordingRing'
@@ -80,6 +84,13 @@ export function LiveSessionPage() {
   const [finishSummary, setFinishSummary] = useState('')
   const [finishAttendance, setFinishAttendance] = useState<Attendance>('hadir')
   const [cancelOpen, setCancelOpen] = useState(false)
+
+  // لوحة المصحف (WP9b §3): عمود جانبي على الشاشات الواسعة، تمدّد فوق منطقة الأزرار على
+  // الموبايل — isWide يختار مكان عرض نسخة اللوحة الوحيدة (لا نُركّب نسختين معاً أبداً).
+  const [mushafOpen, setMushafOpen] = useState(false)
+  const isWide = useMediaQuery('(min-width: 1024px)')
+  // نقطة ربط جاهزة لخدمة التتبع الصوتي (WP9c) — لا مستهلك لها بعد داخل هذه الحزمة.
+  const mushafControlRef = useRef<MushafControlHandle | null>(null)
 
   // مفتاح مستقل عن ['sessions','active'] المستخدم في SessionsPage عمداً: تلك الصفحة
   // قد تكون خزّنت {session: null} قبل إنشاء الجلسة (زر «بدء جلسة تسميع» ينتقل هنا فوراً
@@ -273,97 +284,176 @@ export function LiveSessionPage() {
 
   const hasRange = sessionInfo.range_start_surah != null && sessionInfo.range_end_surah != null
 
+  // نسخة لوحة مصحف واحدة فقط في الشجرة مهما كان العرض — إما جانبية (واسعة) أو ممتدة فوق
+  // منطقة الأزرار (موبايل)، أبداً كلاهما معاً (لا نُركّب MushafPage مرتين بحالتين متضاربتين).
+  const showDesktopMushaf = mushafOpen && isWide
+  const showMobileMushaf = mushafOpen && !isWide
+
   return (
-    <div className="flex min-h-screen flex-col bg-lazward-900">
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
-        <header className="flex items-start justify-between gap-3 px-4 pt-6">
-          <div className="min-w-0">
-            <h1 className="truncate font-display text-2xl text-nur">{sessionInfo.student_name}</h1>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-nur/70">
-              <span>{sessionTypeLabels[sessionInfo.session_type]}</span>
-              {hasRange && (
-                <>
-                  <AyahChip
-                    tone="lazward"
-                    surah={surahNameByNumber.get(sessionInfo.range_start_surah as number) ?? String(sessionInfo.range_start_surah)}
-                    ayah={sessionInfo.range_start_ayah as number}
-                  />
-                  <span className="text-nur/40">—</span>
-                  <AyahChip
-                    tone="lazward"
-                    surah={surahNameByNumber.get(sessionInfo.range_end_surah as number) ?? String(sessionInfo.range_end_surah)}
-                    ayah={sessionInfo.range_end_ayah as number}
-                  />
-                </>
-              )}
+    <div className={cx('flex min-h-screen flex-col bg-lazward-900', showDesktopMushaf && 'lg:flex-row')}>
+      <div className={cx('flex flex-1 flex-col', showDesktopMushaf && 'lg:overflow-y-auto')}>
+        <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
+          <header className="flex items-start justify-between gap-3 px-4 pt-6">
+            <div className="min-w-0">
+              <h1 className="truncate font-display text-2xl text-nur">{sessionInfo.student_name}</h1>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-nur/70">
+                <span>{sessionTypeLabels[sessionInfo.session_type]}</span>
+                {hasRange && (
+                  <>
+                    <AyahChip
+                      tone="lazward"
+                      surah={surahNameByNumber.get(sessionInfo.range_start_surah as number) ?? String(sessionInfo.range_start_surah)}
+                      ayah={sessionInfo.range_start_ayah as number}
+                    />
+                    <span className="text-nur/40">—</span>
+                    <AyahChip
+                      tone="lazward"
+                      surah={surahNameByNumber.get(sessionInfo.range_end_surah as number) ?? String(sessionInfo.range_end_surah)}
+                      ayah={sessionInfo.range_end_ayah as number}
+                    />
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-          {isRecording && (
-            <button
-              type="button"
-              onClick={() => setCancelOpen(true)}
-              className="shrink-0 rounded-control px-2.5 py-1.5 text-sm text-nur/55 hover:bg-nur/10 hover:text-nur"
-            >
-              إلغاء
-            </button>
-          )}
-        </header>
-
-        <div className="flex flex-col items-center justify-center gap-3 px-4 py-8">
-          <RecordingRing elapsedMs={elapsedMs} level={isRecording ? level : 0} />
-          <p className="text-sm text-nur/70" role="status">
-            {statusText}
-          </p>
-        </div>
-
-        <div className="px-4">
-          {taxonomyQuery.isLoading ? (
-            <div className="flex justify-center py-4">
-              <Spinner tone="nur" />
-            </div>
-          ) : (
-            <div
-              className={cx(
-                'grid grid-cols-2 gap-3 sm:grid-cols-3',
-                !isRecording && 'pointer-events-none opacity-40',
-              )}
-            >
-              {categories.map((category) => (
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMushafOpen((open) => !open)}
+                aria-pressed={mushafOpen}
+                data-testid="toggle-mushaf"
+                className={cx(
+                  'flex h-9 items-center gap-1.5 rounded-control border px-3 text-sm transition-colors duration-150',
+                  mushafOpen
+                    ? 'border-dhahab-bright/50 bg-dhahab-bright/10 text-dhahab-bright'
+                    : 'border-nur/15 text-nur/70 hover:bg-nur/10 hover:text-nur',
+                )}
+              >
+                <IconBook className="h-4 w-4" />
+                المصحف
+              </button>
+              {isRecording && (
                 <button
-                  key={category.id}
                   type="button"
-                  disabled={!isRecording}
-                  onClick={() => handleCategoryPress(category)}
-                  data-testid="note-category-button"
-                  data-category={category.key ?? category.id}
-                  className={cx(
-                    'flex h-14 items-center justify-center rounded-control border bg-lazward-800 px-2 text-center text-sm font-medium leading-tight transition-colors duration-150',
-                    noteLazwardAccentClasses(category.color),
-                  )}
+                  onClick={() => setCancelOpen(true)}
+                  className="shrink-0 rounded-control px-2.5 py-1.5 text-sm text-nur/55 hover:bg-nur/10 hover:text-nur"
                 >
-                  {category.name}
+                  إلغاء
                 </button>
-              ))}
+              )}
             </div>
-          )}
-        </div>
+          </header>
 
-        <div className="flex-1" />
+          <div className="flex flex-col items-center justify-center gap-3 px-4 py-8">
+            <RecordingRing elapsedMs={elapsedMs} level={isRecording ? level : 0} />
+            <p className="text-sm text-nur/70" role="status">
+              {statusText}
+            </p>
+          </div>
 
-        <SessionThread notes={threadNotes} elapsedMs={elapsedMs} />
+          {showMobileMushaf ? (
+            // موبايل مع فتح المصحف: اللوحة تحل محل شبكة الملاحظات وخيط الجلسة (توفيراً
+            // للمساحة)، والمؤقت أعلاه يبقى ظاهراً كما هو، وشريط مضغوط تحت اللوحة يبقي
+            // المؤقت وملاحظة سريعة بمتناول اليد (DIRECTION §3 — هذه شاشة اللمس الأساسية).
+            <div className="flex flex-1 flex-col px-4">
+              <MushafPanel
+                rangeStartSurah={sessionInfo.range_start_surah}
+                rangeStartAyah={sessionInfo.range_start_ayah}
+                onClose={() => setMushafOpen(false)}
+                onControlReady={(handle) => {
+                  mushafControlRef.current = handle
+                }}
+                className="flex flex-1 flex-col"
+              />
 
-        <div className="px-4 pb-6 pt-2">
-          {isFinishing ? (
-            <Button variant="secondary" className="w-full" loading disabled>
-              جارٍ حفظ الجلسة…
-            </Button>
+              <div className="mt-2 flex min-w-0 items-center gap-2 border-t border-nur/10 pt-2">
+                <span className="shrink-0 font-time text-sm tabular-nums text-nur/80">{formatDuration(elapsedMs)}</span>
+                <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
+                  {categories.map((category) => (
+                    <button
+                      key={category.id}
+                      type="button"
+                      disabled={!isRecording}
+                      onClick={() => handleCategoryPress(category)}
+                      data-testid="note-category-button"
+                      data-category={category.key ?? category.id}
+                      className={cx(
+                        'flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-control border bg-lazward-800 px-3 text-sm font-medium transition-colors duration-150 disabled:opacity-40',
+                        noteLazwardAccentClasses(category.color),
+                      )}
+                    >
+                      {category.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           ) : (
-            <Button variant="secondary" className="w-full" onClick={() => setFinishOpen(true)}>
-              أنهِ الجلسة
-            </Button>
+            <>
+              <div className="px-4">
+                {taxonomyQuery.isLoading ? (
+                  <div className="flex justify-center py-4">
+                    <Spinner tone="nur" />
+                  </div>
+                ) : (
+                  <div
+                    className={cx(
+                      'grid grid-cols-2 gap-3 sm:grid-cols-3',
+                      !isRecording && 'pointer-events-none opacity-40',
+                    )}
+                  >
+                    {categories.map((category) => (
+                      <button
+                        key={category.id}
+                        type="button"
+                        disabled={!isRecording}
+                        onClick={() => handleCategoryPress(category)}
+                        data-testid="note-category-button"
+                        data-category={category.key ?? category.id}
+                        className={cx(
+                          'flex h-14 items-center justify-center rounded-control border bg-lazward-800 px-2 text-center text-sm font-medium leading-tight transition-colors duration-150',
+                          noteLazwardAccentClasses(category.color),
+                        )}
+                      >
+                        {category.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1" />
+
+              <SessionThread notes={threadNotes} elapsedMs={elapsedMs} />
+            </>
           )}
+
+          <div className="px-4 pb-6 pt-2">
+            {isFinishing ? (
+              <Button variant="secondary" className="w-full" loading disabled>
+                جارٍ حفظ الجلسة…
+              </Button>
+            ) : (
+              <Button variant="secondary" className="w-full" onClick={() => setFinishOpen(true)}>
+                أنهِ الجلسة
+              </Button>
+            )}
+          </div>
         </div>
       </div>
+
+      {showDesktopMushaf && (
+        <div className="hidden border-s border-nur/10 bg-lazward-800/40 lg:flex lg:w-[420px] lg:shrink-0 lg:flex-col lg:overflow-y-auto lg:p-4">
+          <MushafPanel
+            rangeStartSurah={sessionInfo.range_start_surah}
+            rangeStartAyah={sessionInfo.range_start_ayah}
+            onClose={() => setMushafOpen(false)}
+            onControlReady={(handle) => {
+              mushafControlRef.current = handle
+            }}
+            className="flex flex-1 flex-col"
+          />
+        </div>
+      )}
 
       <BottomSheet
         open={sheetOpen && Boolean(activeCategory && noteForm)}

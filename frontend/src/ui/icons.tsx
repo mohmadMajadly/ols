@@ -86,6 +86,31 @@ export function IconChevronDown(props: IconProps) {
   )
 }
 
+export function IconChevronRight(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M9 5.5 15 12l-6 6.5" />
+    </svg>
+  )
+}
+
+export function IconChevronLeft(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M15 5.5 9 12l6 6.5" />
+    </svg>
+  )
+}
+
+export function IconBook(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 6.2C10.6 5 8.6 4.5 6.5 4.5c-.9 0-1.5.62-1.5 1.4v11.6c0 .78.6 1.4 1.5 1.4 2.1 0 4.1.5 5.5 1.6 1.4-1.1 3.4-1.6 5.5-1.6.9 0 1.5-.62 1.5-1.4V5.9c0-.78-.6-1.4-1.5-1.4-2.1 0-4.1.5-5.5 1.7Z" />
+      <path d="M12 6.2v13.3" />
+    </svg>
+  )
+}
+
 export function IconEye(props: IconProps) {
   return (
     <svg {...base} {...props}>
