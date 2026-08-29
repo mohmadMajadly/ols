@@ -5,8 +5,11 @@ import { AppShell } from './app/AppShell'
 import type { UserRole } from './auth/AuthContext'
 import { useAuth } from './auth/AuthContext'
 import { GroupsPage } from './pages/GroupsPage'
+import { LiveSessionPage } from './pages/live/LiveSessionPage'
 import LoginPage from './pages/LoginPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
+import { SessionDetailPage } from './pages/sessions/SessionDetailPage'
+import { SessionsPage } from './pages/sessions/SessionsPage'
 import { StudentDetailPage } from './pages/StudentDetailPage'
 import { StudentsPage } from './pages/StudentsPage'
 import { UiGalleryPage } from './pages/UiGalleryPage'
@@ -50,6 +53,16 @@ export default function AppRoutes() {
 
       {import.meta.env.DEV && <Route path="/dev/ui" element={<UiGalleryPage />} />}
 
+      {/* شاشة الجلسة الحية: ملء الشاشة بلا AppShell — خارج عالم الورق عمداً */}
+      <Route
+        path="/sessions/live"
+        element={
+          <ProtectedRoute>
+            <LiveSessionPage />
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="/"
         element={
@@ -62,7 +75,8 @@ export default function AppRoutes() {
         <Route path="students" element={<StudentsPage />} />
         <Route path="students/:id" element={<StudentDetailPage />} />
         <Route path="groups" element={<GroupsPage />} />
-        <Route path="sessions" element={<PlaceholderPage title="الجلسات" />} />
+        <Route path="sessions" element={<SessionsPage />} />
+        <Route path="sessions/:id" element={<SessionDetailPage />} />
         <Route
           path="users"
           element={

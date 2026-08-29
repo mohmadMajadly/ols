@@ -109,6 +109,41 @@ body {
   outline-offset: -2px;
 }
 
+/* لوحة سفلية منزلقة (شاشة الجلسة الحية) — سقوط قصير من الأسفل عند الفتح فقط */
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* نبض الحلقة الذهبية الأساسي حول مؤقت التسجيل — تنفس بطيء ~2s، مستقل عن مستوى الصوت */
+@keyframes lazward-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.85;
+  }
+}
+
+/* سقوط خرزة الملاحظة على خيط الجلسة عند الإضافة */
+@keyframes bead-drop {
+  from {
+    transform: translateY(-10px) scale(0.4);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

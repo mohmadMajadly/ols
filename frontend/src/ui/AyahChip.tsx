@@ -5,22 +5,32 @@ import type { HTMLAttributes } from 'react'
 
 import { cx } from './utils'
 
+export type AyahChipTone = 'paper' | 'lazward'
+
 export interface AyahChipProps extends HTMLAttributes<HTMLSpanElement> {
   surah: string
   ayah: number | string
+  /** 'paper' (افتراضي، عالم الإدارة) أو 'lazward' (فوق خلفية اللازورد الداكنة). */
+  tone?: AyahChipTone
 }
 
-export function AyahChip({ surah, ayah, className, ...rest }: AyahChipProps) {
+const toneClasses: Record<AyahChipTone, string> = {
+  paper: 'border-dhahab/50 bg-dhahab/[0.06] text-hibr',
+  lazward: 'border-dhahab-bright/60 bg-dhahab-bright/[0.1] text-nur',
+}
+
+export function AyahChip({ surah, ayah, tone = 'paper', className, ...rest }: AyahChipProps) {
   return (
     <span
       className={cx(
-        'inline-flex items-center gap-1 rounded-full border border-dhahab/50 bg-dhahab/[0.06] px-2.5 py-0.5 text-sm text-hibr',
+        'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-sm',
+        toneClasses[tone],
         className,
       )}
       {...rest}
     >
       <span>{surah}</span>
-      <span className="text-hibr-3">:</span>
+      <span className={tone === 'lazward' ? 'text-nur/50' : 'text-hibr-3'}>:</span>
       <span className="font-time tabular-nums">{ayah}</span>
     </span>
   )
