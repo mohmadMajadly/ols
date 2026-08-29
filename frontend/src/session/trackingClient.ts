@@ -26,6 +26,8 @@ export interface ExpectedWordLite {
 interface TrackingClientCallbacks {
   onStatusChange: (status: TrackingStatus) => void
   onPosition: (position: TrackingPosition) => void
+  /** فشل يستحق إبلاغ المعلم برسالة عربية (لا يُستدعى لإعادة الاتصال الصامتة العادية) */
+  onError?: (message: string) => void
 }
 
 const MAX_RECONNECT_DELAY_MS = 15000
@@ -72,6 +74,7 @@ export class TrackingClient {
   private workletNode: AudioWorkletNode | null = null
 
   private stopped = true
+  private everOpened = false
   private reconnectTimer: number | null = null
   private reconnectDelayMs = 1000
 
@@ -111,6 +114,7 @@ export class TrackingClient {
     } catch {
       this.stopped = true
       this.callbacks.onStatusChange('stopped')
+      this.callbacks.onError?.('تعذر تهيئة التقاط الصوت للتتبع — جرّب تحديث الصفحة')
       return
     }
 
@@ -195,6 +199,7 @@ export class TrackingClient {
     this.ws = ws
 
     ws.onopen = () => {
+      this.everOpened = true
       this.reconnectDelayMs = 1000
     }
 
@@ -230,6 +235,13 @@ export class TrackingClient {
     ws.onclose = () => {
       if (this.ws === ws) this.ws = null
       if (this.stopped) return
+      if (!this.everOpened) {
+        // فشل الاتصال الأول أصلاً (رفض خادم/مسار) — أبلغ بوضوح وتوقف بدل
+        // حلقة إعادة محاولة صامتة توهم أن الزر «لا يعمل»
+        this.stop()
+        this.callbacks.onError?.('تعذر الاتصال بخدمة التتبع — تأكد أن الخدمة تعمل ثم أعد المحاولة')
+        return
+      }
       this.callbacks.onStatusChange('paused')
       this.scheduleReconnect()
     }

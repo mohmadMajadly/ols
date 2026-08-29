@@ -226,13 +226,24 @@ export function LiveSessionPage() {
       stopTracking()
       return
     }
+    if (!sessionInfo) return
     // التفرع القرائي على تيار ميكروفون المحرك نفسه — لا ميكروفون ثانٍ أبداً
     const stream = getMediaStream()
-    if (!stream || !sessionInfo) return
+    if (!stream) {
+      toast.show('تعذر الوصول إلى صوت الجلسة لتشغيل التتبع — حدّث الصفحة وأعد المحاولة', 'error')
+      return
+    }
     const client = new TrackingClient(
       sessionInfo.id,
       stream,
-      { onStatusChange: setTrackingStatus, onPosition: (pos) => void handleTrackingPosition(pos) },
+      {
+        onStatusChange: setTrackingStatus,
+        onPosition: (pos) => void handleTrackingPosition(pos),
+        onError: (message) => {
+          setTrackingOn(false)
+          toast.show(message, 'error')
+        },
+      },
       () => fetchExpectedWords(sessionInfo.id),
     )
     trackingClientRef.current = client
