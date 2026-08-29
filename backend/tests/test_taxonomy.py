@@ -121,3 +121,22 @@ def test_student_forbidden_from_taxonomy(client, db_session):
 
     response = client.get("/api/taxonomy")
     assert response.status_code == 403
+
+
+def test_include_inactive_shows_deactivated_category_to_admin(client):
+    _login_as_admin(client)
+    taxonomy = client.get("/api/taxonomy").json()
+    waqf_id = next(c["id"] for c in taxonomy["categories"] if c["key"] == "waqf")
+    client.patch(f"/api/taxonomy/categories/{waqf_id}", json={"is_active": False})
+
+    # بدون المعامل: تختفي؛ معه: تظهر مع is_active=False (لصفحة الإعدادات)
+    without = client.get("/api/taxonomy").json()
+    assert "waqf" not in [c["key"] for c in without["categories"]]
+
+    with_flag = client.get("/api/taxonomy?include_inactive=true").json()
+    waqf = next(c for c in with_flag["categories"] if c["key"] == "waqf")
+    assert waqf["is_active"] is False
+
+    # إعادة التفعيل ممكنة عبر ما ظهر
+    client.patch(f"/api/taxonomy/categories/{waqf_id}", json={"is_active": True})
+    assert "waqf" in [c["key"] for c in client.get("/api/taxonomy").json()["categories"]]

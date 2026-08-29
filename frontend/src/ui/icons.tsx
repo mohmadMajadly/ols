@@ -169,6 +169,31 @@ export function IconMic(props: IconProps) {
   )
 }
 
+export function IconTrash(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4.5 7h15M9.5 7V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v2M7 7l.7 12.1a1.8 1.8 0 0 0 1.8 1.65h5a1.8 1.8 0 0 0 1.8-1.65L17 7" />
+      <path d="M10.2 11v6M13.8 11v6" />
+    </svg>
+  )
+}
+
+export function IconArrowUp(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 19V5M6 10.5 12 5l6 5.5" />
+    </svg>
+  )
+}
+
+export function IconArrowDown(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 5v14M18 13.5 12 19l-6-5.5" />
+    </svg>
+  )
+}
+
 export function IconLogout(props: IconProps) {
   return (
     <svg {...base} {...props}>

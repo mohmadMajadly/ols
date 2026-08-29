@@ -8,6 +8,7 @@ import { GroupsPage } from './pages/GroupsPage'
 import { LiveSessionPage } from './pages/live/LiveSessionPage'
 import LoginPage from './pages/LoginPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
+import { SettingsPage } from './pages/settings/SettingsPage'
 import { SessionDetailPage } from './pages/sessions/SessionDetailPage'
 import { SessionsPage } from './pages/sessions/SessionsPage'
 import { StudentDetailPage } from './pages/StudentDetailPage'
@@ -85,7 +86,14 @@ export default function AppRoutes() {
             </RoleGuard>
           }
         />
-        <Route path="settings" element={<PlaceholderPage title="الإعدادات" />} />
+        <Route
+          path="settings"
+          element={
+            <RoleGuard roles={['admin', 'supervisor']}>
+              <SettingsPage />
+            </RoleGuard>
+          }
+        />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

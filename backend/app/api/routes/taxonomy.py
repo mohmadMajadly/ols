@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_roles
@@ -44,20 +44,24 @@ def _category_out(db: Session, category: NoteCategory, *, only_active_subtypes: 
 
 @router.get("", response_model=TaxonomyOut)
 def get_taxonomy(
+    include_inactive: bool = Query(default=False),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*_staff_roles)),
 ) -> TaxonomyOut:
-    categories = (
-        db.query(NoteCategory)
-        .filter(NoteCategory.is_active.is_(True))
-        .order_by(NoteCategory.sort_order)
-        .all()
-    )
-    fields = (
-        db.query(NoteField).filter(NoteField.is_active.is_(True)).order_by(NoteField.sort_order).all()
-    )
+    # صفحة الإعدادات تحتاج رؤية المعطَّل لإعادة تفعيله؛ يُسمح بذلك
+    # للمدير والمشرف فقط — شاشة الجلسة تبقى على النشط حصراً.
+    show_all = include_inactive and current_user.role in _manager_roles
+
+    categories_query = db.query(NoteCategory)
+    fields_query = db.query(NoteField)
+    if not show_all:
+        categories_query = categories_query.filter(NoteCategory.is_active.is_(True))
+        fields_query = fields_query.filter(NoteField.is_active.is_(True))
+
+    categories = categories_query.order_by(NoteCategory.sort_order).all()
+    fields = fields_query.order_by(NoteField.sort_order).all()
     return TaxonomyOut(
-        categories=[_category_out(db, c, only_active_subtypes=True) for c in categories],
+        categories=[_category_out(db, c, only_active_subtypes=not show_all) for c in categories],
         fields=[NoteFieldOut.model_validate(f) for f in fields],
     )
 
