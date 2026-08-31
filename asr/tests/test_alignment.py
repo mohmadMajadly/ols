@@ -83,10 +83,28 @@ def test_far_jump_needs_three_consecutive_matches():
     assert u_three.advanced and u_three.current.text == "نَسْتَعِينُ"
 
 
-def test_single_word_match_does_not_advance():
+def test_single_next_word_match_advances_smoothly():
+    # خطوة الكلمة-التالية: مطابقة واحدة للكلمة التالية مباشرة تقدّم المؤشر فوراً
+    # (انزلاق سلس)، بينما مطابقة واحدة بعيدة لا تحرّكه.
     t = RecitationTracker(make_expected())
-    u = t.update("بسم")
-    assert not u.advanced and u.position == -1
+    u1 = t.update("بسم")
+    assert u1.advanced and u1.position == 0
+    u2 = t.update("بسم الله")
+    assert u2.position == 1
+    # كلمة واحدة بعيدة (نستعين، بعد >6 مواضع) — لا تقدم
+    u3 = t.update("نستعين")
+    assert u3.position == 1 and not u3.advanced
+
+
+def test_noise_bridge_prevents_stall_then_jump():
+    # اختبار انحدار لنمط «توقف ثم قفزة» الذي لمسه المستخدم: كلمة مشوشة واحدة
+    # وسط المطابقات كانت تقطع السلسلة فلا يتقدم المؤشر إطلاقاً في تلك الدورة.
+    t = RecitationTracker(make_expected())
+    t.update("بسم الله الرحمن الرحيم")  # position=3
+    # ضجيج وسط كلمتين صحيحتين (الحمد=4 ... رب=6): القطع الصارم القديم كان يترك
+    # سلسلتين منفردتين لا تكفيان للتقدم — فيتجمد المؤشر هذه الدورة كاملة.
+    u = t.update("الحمد قلقلق رب")
+    assert u.advanced and u.position == 6  # وصل "رب" رغم الضجيج — لا تجمد
 
 
 def test_reset_allows_going_back():

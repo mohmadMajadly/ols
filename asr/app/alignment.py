@@ -26,6 +26,10 @@ GAP_PENALTY = -0.55
 MIN_RUN_NEAR = 2  # مطابقات متتالية لازمة للتقدم القريب
 MIN_RUN_FAR = 3  # ...وللقفزة البعيدة
 NEAR_JUMP_LIMIT = 6  # ما بعده يُعد قفزة بعيدة
+# جسر التسامح: عدد العمليات غير المطابقة (sub/ins/del) المسموح ابتلاعها داخل
+# السلسلة الواحدة دون قطعها — خلل واحد من ضجيج النموذج لا يجمّد المؤشر
+# (كان القطع الصارم سبب نمط «توقف ثم قفزة» الذي لمسه المستخدم فعلياً).
+RUN_BRIDGE_TOLERANCE = 1
 
 
 @dataclass(frozen=True)
@@ -151,29 +155,45 @@ class RecitationTracker:
 
         ops = self._align(hyp, lo, hi)
 
-        # اجمع "سلاسل" المطابقات المتتالية (قطرية متصلة في exp_index)
+        # اجمع "سلاسل" المطابقات (قطرية متصلة في exp_index) مع جسر تسامح: حتى
+        # RUN_BRIDGE_TOLERANCE عملية غير مطابقة بين مطابقتين لا تقطع السلسلة —
+        # بشرط أن تبقى المطابقة التالية استمراراً قريباً في المتوقع (فجوة ≤2).
         runs: list[list[AlignmentOp]] = []
         current_run: list[AlignmentOp] = []
-        prev_exp = None
+        prev_exp: int | None = None
+        pending_bridge = 0
         for op in ops:
             if op.op == "match":
-                if prev_exp is not None and op.exp_index == prev_exp + 1 and current_run:
+                continues_run = (
+                    current_run
+                    and prev_exp is not None
+                    and op.exp_index is not None
+                    and 0 < op.exp_index - prev_exp <= 1 + pending_bridge
+                )
+                if continues_run:
                     current_run.append(op)
                 else:
                     if current_run:
                         runs.append(current_run)
                     current_run = [op]
                 prev_exp = op.exp_index
-            elif op.op in ("sub", "del", "ins"):
-                # sub/ins لا تقطع السلسلة إن كانت قصيرة؟ نتشدد: أي غير مطابقة تقطع
-                if current_run:
+                pending_bridge = 0
+            else:
+                if not current_run:
+                    continue
+                if pending_bridge < RUN_BRIDGE_TOLERANCE:
+                    pending_bridge += 1
+                else:
                     runs.append(current_run)
-                current_run = []
-                prev_exp = None
+                    current_run = []
+                    prev_exp = None
+                    pending_bridge = 0
         if current_run:
             runs.append(current_run)
 
-        # رشّح أفضل موضع جديد: أبعد سلسلة تحقق شرط الطول حسب بعد القفزة
+        # رشّح أفضل موضع جديد: أبعد سلسلة تحقق شرط الطول حسب بعد القفزة.
+        # خطوة الكلمة-التالية (+1) تُقبل بمطابقة واحدة — انزلاق سلس كلمة-كلمة
+        # بدل انتظار مطابقتين ثم الوثب (سلاسة طلبها المستخدم صراحة).
         best_pos = self.position
         best_conf = 0.0
         for run in runs:
@@ -182,7 +202,13 @@ class RecitationTracker:
             if end <= self.position:
                 continue
             jump = end - self.position
-            needed = MIN_RUN_NEAR if jump <= NEAR_JUMP_LIMIT else MIN_RUN_FAR
+            needed = (
+                1
+                if jump == 1
+                else MIN_RUN_NEAR
+                if jump <= NEAR_JUMP_LIMIT
+                else MIN_RUN_FAR
+            )
             if len(run) >= needed and end > best_pos:
                 best_pos = end
                 best_conf = sum(o.similarity for o in run) / len(run)

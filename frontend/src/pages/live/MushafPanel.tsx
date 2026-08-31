@@ -8,7 +8,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 
 import type { MushafWord } from '../../api/mushaf'
-import { fetchMushafPageFor } from '../../api/mushaf'
+import { fetchMushafPageFor, MUSHAF_TOTAL_PAGES } from '../../api/mushaf'
+import { fetchSurahs } from '../../api/quran'
 import { getLastMushafPage, setLastMushafPage } from '../../mushaf/lastPage'
 import type { MushafControlHandle } from '../../mushaf/MushafPage'
 import { MushafPage } from '../../mushaf/MushafPage'
@@ -37,6 +38,28 @@ export function MushafPanel({
   const [startPage, setStartPage] = useState<number | null>(null)
   const controlRef = useRef<MushafControlHandle>(null)
   const resolvedRef = useRef(false)
+
+  // تنقل سريع (طلب مستخدم): رقم صفحة يُكتب مباشرة + قفز إلى أول أي سورة
+  const [pageDraft, setPageDraft] = useState('')
+  const surahsQuery = useQuery({ queryKey: ['quran', 'surahs'], queryFn: fetchSurahs, staleTime: Infinity })
+
+  function commitPageDraft() {
+    const n = Number(pageDraft)
+    if (Number.isInteger(n) && n >= 1 && n <= MUSHAF_TOTAL_PAGES) {
+      controlRef.current?.goToPage(n)
+    }
+    setPageDraft('')
+  }
+
+  async function jumpToSurah(surahNumber: number) {
+    if (!surahNumber) return
+    try {
+      const location = await fetchMushafPageFor(surahNumber, 1)
+      controlRef.current?.goToPage(location.page)
+    } catch {
+      // فشل نادر — نتجاهله بصمت، التنقل بالأسهم يبقى متاحاً
+    }
+  }
 
   const hasRange = rangeStartSurah != null && rangeStartAyah != null
   const pageForQuery = useQuery({
@@ -106,6 +129,38 @@ export function MushafPanel({
         >
           <IconClose className="h-4 w-4" />
         </button>
+      </div>
+
+      {/* صف التنقل السريع: رقم صفحة مباشر + قفز إلى سورة (طلب مستخدم صريح) */}
+      <div className="mb-2 flex items-center gap-2">
+        <input
+          type="number"
+          min={1}
+          max={MUSHAF_TOTAL_PAGES}
+          inputMode="numeric"
+          placeholder="صفحة"
+          aria-label="اذهب إلى صفحة"
+          value={pageDraft}
+          onChange={(e) => setPageDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commitPageDraft()
+          }}
+          onBlur={() => pageDraft && commitPageDraft()}
+          className="h-8 w-20 rounded-control border border-khatt bg-waraq-raised px-2 text-center font-time text-sm tabular-nums text-hibr placeholder:font-ui placeholder:text-hibr-3"
+        />
+        <select
+          aria-label="اذهب إلى سورة"
+          value=""
+          onChange={(e) => void jumpToSurah(Number(e.target.value))}
+          className="h-8 min-w-0 flex-1 rounded-control border border-khatt bg-waraq-raised px-2 text-sm text-hibr"
+        >
+          <option value="">اذهب إلى سورة…</option>
+          {(surahsQuery.data ?? []).map((s) => (
+            <option key={s.number} value={s.number}>
+              {s.number}. {s.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       <MushafPage

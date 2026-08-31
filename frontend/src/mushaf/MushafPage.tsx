@@ -11,7 +11,15 @@
 // في شريط تنقل خارجي أو حفظها في localStorage) دون أن يتحوّل هو إلى مصدر الحقيقة.
 
 import { useQuery } from '@tanstack/react-query'
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
 import { ApiError } from '../api/client'
 import type { MushafLine, MushafWord } from '../api/mushaf'
@@ -270,21 +278,80 @@ function MushafLineView({
   const overstretched = line.centered || gapCount === 0 || idealGap > maxGapPx
 
   return (
-    <div
-      dir="rtl"
-      className={cx('flex flex-1 items-center', overstretched ? 'justify-center' : 'justify-between')}
-      style={overstretched ? { columnGap: Math.min(maxGapPx, Math.max(idealGap, fontSize * 0.25)) } : undefined}
-    >
-      {line.words.map((word) => (
-        <WordSpan
-          key={`${word.surah}-${word.ayah}-${word.word}`}
-          word={word}
-          family={pageFamily}
-          fontSize={fontSize}
-          highlight={highlight}
-          onWordClick={onWordClick}
+    <AyahBandLine highlight={highlight} lineWords={line.words}>
+      <div
+        dir="rtl"
+        className={cx('flex h-full w-full items-center', overstretched ? 'justify-center' : 'justify-between')}
+        style={overstretched ? { columnGap: Math.min(maxGapPx, Math.max(idealGap, fontSize * 0.25)) } : undefined}
+      >
+        {line.words.map((word) => (
+          <WordSpan
+            key={`${word.surah}-${word.ayah}-${word.word}`}
+            word={word}
+            family={pageFamily}
+            fontSize={fontSize}
+            highlight={highlight}
+            onWordClick={onWordClick}
+          />
+        ))}
+      </div>
+    </AyahBandLine>
+  )
+}
+
+/**
+ * شريط تظليل الآية ككتلة واحدة متصلة (طلب مستخدم صريح): بدل تلوين كل كلمة على
+ * حدة — ما كان يقطّع الآية بصرياً ويشتت القارئ — نقيس امتداد كلمات الآية
+ * المظللة داخل السطر ونرسم خلفها شريطاً واحداً متصلاً (لكل سطر شريطه، فالآية
+ * الممتدة على أسطر تظهر كأشرطة متراصة). الكلمة الجارية تحتفظ بغسلتها الذهبية فوقه.
+ */
+function AyahBandLine({
+  highlight,
+  lineWords,
+  children,
+}: {
+  highlight: MushafHighlight | null
+  lineWords: MushafWord[]
+  children: React.ReactNode
+}) {
+  const hostRef = useRef<HTMLDivElement>(null)
+  const [band, setBand] = useState<{ left: number; width: number } | null>(null)
+
+  const hasHighlightOnLine =
+    highlight != null && lineWords.some((w) => w.surah === highlight.surah && w.ayah === highlight.ayah)
+
+  useLayoutEffect(() => {
+    const host = hostRef.current
+    if (!host || !hasHighlightOnLine) {
+      setBand(null)
+      return
+    }
+    const spans = host.querySelectorAll<HTMLElement>('span[data-highlighted]')
+    if (spans.length === 0) {
+      setBand(null)
+      return
+    }
+    const hostRect = host.getBoundingClientRect()
+    let left = Number.POSITIVE_INFINITY
+    let right = Number.NEGATIVE_INFINITY
+    spans.forEach((span) => {
+      const r = span.getBoundingClientRect()
+      left = Math.min(left, r.left - hostRect.left)
+      right = Math.max(right, r.right - hostRect.left)
+    })
+    setBand({ left: Math.max(0, left - 5), width: right - left + 10 })
+  }, [hasHighlightOnLine, highlight, lineWords])
+
+  return (
+    <div ref={hostRef} className="relative flex-1">
+      {band && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute rounded-[6px] bg-lazward-100/70 transition-all duration-200"
+          style={{ left: band.left, width: band.width, top: '8%', height: '84%' }}
         />
-      ))}
+      )}
+      {children}
     </div>
   )
 }
@@ -329,11 +396,12 @@ function WordSpan({
       }
       style={{ fontFamily: `"${family}"`, fontSize }}
       className={cx(
-        'inline-block rounded-[3px] px-0.5 leading-none text-hibr transition-colors duration-150',
+        // relative: كي تُرسم الكلمات فوق شريط الآية المطلق (AyahBandLine)
+        'relative inline-block rounded-[3px] px-0.5 leading-none text-hibr transition-colors duration-150',
         clickable && 'cursor-pointer',
-        // تظليل بغسلة خلفية فقط — لا خطوط ولا حدود فوق كلام الله (خط تحت الكلمة
-        // قرأه مستخدم حقيقي كعلامة شطب/خطأ في المصحف)
-        wordHi ? 'bg-dhahab/30' : ayahHi ? 'bg-lazward-100/55' : '',
+        // الكلمة الجارية وحدها تحمل غسلة ذهبية؛ تظليل الآية صار شريطاً متصلاً
+        // خلف السطر كله (AyahBandLine) بدل تقطيع كل كلمة على حدة
+        wordHi && 'bg-dhahab/30',
       )}
     >
       {word.glyph}

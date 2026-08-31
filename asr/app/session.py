@@ -19,11 +19,11 @@ from .alignment import ExpectedWord, RecitationTracker
 SAMPLE_RATE = 16_000
 BYTES_PER_SAMPLE = 2  # PCM Int16
 
-WINDOW_SECONDS = 7.0  # نافذة فك الترميز المنزلقة (آخر 6-8 ثوانٍ — ASR-ARCHITECTURE §3)
+WINDOW_SECONDS = 6.0  # نافذة فك الترميز المنزلقة (ASR-ARCHITECTURE §3) — قُصّرت من 7 لخفض كلفة الدورة
 MIN_DECODE_SECONDS = 0.5  # أقل من هذا لا فائدة من فك ترميز (صمت/بداية الجلسة)
 MAX_BUFFER_SECONDS = 20.0  # سقف الـring buffer — يُسقط الأقدم عند تجاوزه (§5)
 
-DECODE_INTERVAL_S = 1.0  # فترة الدورة الافتراضية (~1s — ASR-ARCHITECTURE §3)
+DECODE_INTERVAL_S = 0.8  # فترة الدورة — قُصّرت من 1s لتحديثات أنعم (سلاسة طلبها المستخدم)
 MAX_DECODE_INTERVAL_S = 4.0  # سقف تكبير الفترة عند تأخر المعالج عن الزمن الحقيقي (§5)
 MIN_DECODE_INTERVAL_S = DECODE_INTERVAL_S
 
