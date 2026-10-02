@@ -382,7 +382,15 @@ OLS_HTTP_SPEC=$httpSpec
 "@
     WriteLf $envFile $envText
     # restrict .env to the current user
-    try { & icacls.exe $envFile /inheritance:r /grant:r "$($env:USERNAME):(F)" | Out-Null } catch { Warn 'Could not restrict .env permissions.' }
+    # (granted by SID: a plain account name can resolve to the wrong principal)
+    try {
+        $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        & icacls.exe $envFile /inheritance:r /grant:r "*${sid}:(F)" | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'icacls failed' }
+    } catch {
+        Warn 'Could not restrict .env permissions; restoring defaults.'
+        & icacls.exe $envFile /reset | Out-Null
+    }
 
     $deployDir = Join-Path $OlsDir 'deploy'
     if (-not (Test-Path $deployDir)) { New-Item -ItemType Directory -Force -Path $deployDir | Out-Null }
