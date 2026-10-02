@@ -1,0 +1,28 @@
+# جسم الموقع المشترك بين كل أنماط الوصول — يُستورد من deploy/Caddyfile (يولّده المثبّت)
+encode zstd gzip
+
+header {
+	X-Content-Type-Options nosniff
+	Referrer-Policy same-origin
+	-Server
+}
+
+# الواجهة البرمجية + WebSocket التتبع (/api/sessions/{id}/track) — reverse_proxy يرقّي WS تلقائياً
+handle /api/* {
+	reverse_proxy backend:8000
+}
+
+handle {
+	root * /srv
+
+	@hashed path /assets/*
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+	@fonts path /fonts/*
+	header @fonts Cache-Control "public, max-age=604800"
+	@shell not path /assets/* /fonts/*
+	header @shell Cache-Control "no-cache"
+
+	# SPA: أي مسار غير موجود كملف يعيد index.html
+	try_files {path} /index.html
+	file_server
+}

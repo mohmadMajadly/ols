@@ -27,3 +27,6 @@ media/
 # لا تُلتزم في git. وكذلك ذاكرة تخزين مؤقت لسكربت بناء بيانات التخطيط.
 frontend/public/fonts/qpc-v2/
 scripts/.cache/
+
+# النشر الإنتاجي: Caddyfile يولّده المثبّت حسب نمط الوصول (deploy/ols-site.caddy يبقى في git)
+deploy/Caddyfile

@@ -1,0 +1,10 @@
+# نهايات الأسطر: LF للسكربتات وملفات Docker/Caddy (تُنفَّذ داخل لينكس)، CRLF لسكربتات PowerShell
+*.sh text eol=lf
+ols text eol=lf
+Caddyfile* text eol=lf
+*.caddy text eol=lf
+Dockerfile* text eol=lf
+.dockerignore text eol=lf
+docker-compose*.yml text eol=lf
+.env.example text eol=lf
+*.ps1 text eol=crlf

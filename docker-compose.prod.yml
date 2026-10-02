@@ -1,0 +1,97 @@
+# حزمة الإنتاج لـ OLS — يديرها install.sh / install.ps1 / ols.sh.
+# اسم المشروع ثابت ومميّز (ols-prod) كي لا يتصادم مع حزمة التطوير (docker-compose.yml)،
+# وتكون الـvolumes منفصلة (ols-prod_pgdata ...).
+# المنافذ والـCaddyfile يحدّدهما المثبّت عبر .env و deploy/Caddyfile.
+name: ols-prod
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # خدمة التتبع الصوتي الآني — داخلية فقط. النموذج يُحوَّل مرة واحدة عند أول إقلاع
+  # إلى volume asr_models (دقائق عديدة)؛ التطبيق يعمل قبل اكتماله والتتبع يتوفر بعده.
+  asr:
+    build: ./asr
+    restart: unless-stopped
+    volumes:
+      - asr_models:/models
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8090/health', timeout=3).status == 200 else 1)",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 40
+      start_period: 900s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ASR_URL: ws://asr:8090
+    volumes:
+      - media:/data/media
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health', timeout=3).status == 200 else 1)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+      asr:
+        condition: service_started
+
+  # نقطة الدخول الوحيدة: Caddy + الواجهة المبنية (multi-stage) — انظر frontend/Dockerfile.prod
+  caddy:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.prod
+    restart: unless-stopped
+    ports:
+      # المنفذ الرئيسي: نمط النطاق 443، المحلي/الشبكة المنفذ الذي اختاره المستخدم
+      - "${OLS_BIND:-127.0.0.1}:${OLS_PORT:-8080}:${OLS_INTERNAL_PORT:-8080}"
+      # المنفذ 80 (تحدّي ACME + إعادة التوجيه) لنمط النطاق فقط؛ غير ذلك يُنشر على loopback بمنفذ عشوائي بلا أثر
+      - "${OLS_HTTP_SPEC:-127.0.0.1:}:80"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./deploy/ols-site.caddy:/etc/caddy/ols-site.caddy:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  media:
+  asr_models:
+  caddy_data:
+  caddy_config:

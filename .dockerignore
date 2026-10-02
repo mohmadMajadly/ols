@@ -1,0 +1,8 @@
+.git
+.env
+**/node_modules
+**/__pycache__
+frontend/dist
+frontend/public/fonts/qpc-v2
+scripts/.cache
+docs
