@@ -492,6 +492,8 @@ main() {
 
   step "Building and starting containers"
   dc up -d --build
+  # the Caddyfile is a bind mount: compose does not notice content changes, so restart Caddy explicitly
+  if [ "$ACTION" = "reconfigure" ]; then dc up -d --force-recreate --no-deps caddy; fi
 
   if ! wait_healthy; then
     warn "The app did not become healthy within ${HEALTH_TIMEOUT}s."

@@ -404,6 +404,8 @@ OLS_HTTP_SPEC=$httpSpec
     # ------------------------------------------------------------ start
     Step 'Building and starting containers'
     Dc up -d --build
+    # the Caddyfile is a bind mount: compose does not notice content changes, so restart Caddy explicitly
+    if ($action -eq 'reconfigure') { Dc up -d --force-recreate --no-deps caddy }
     if (-not (Wait-Healthy $mode $port)) {
         Warn "The app did not become healthy within $HealthTimeout seconds."
         Fail "Inspect: cd $OlsDir ; docker compose logs backend caddy"
