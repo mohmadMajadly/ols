@@ -382,7 +382,7 @@ OLS_HTTP_SPEC=$httpSpec
 "@
     WriteLf $envFile $envText
     # restrict .env to the current user
-    try { & icacls.exe $envFile /inheritance:r /grant:r "$($env:USERNAME):(R,W)" | Out-Null } catch { Warn 'Could not restrict .env permissions.' }
+    try { & icacls.exe $envFile /inheritance:r /grant:r "$($env:USERNAME):(F)" | Out-Null } catch { Warn 'Could not restrict .env permissions.' }
 
     $deployDir = Join-Path $OlsDir 'deploy'
     if (-not (Test-Path $deployDir)) { New-Item -ItemType Directory -Force -Path $deployDir | Out-Null }
