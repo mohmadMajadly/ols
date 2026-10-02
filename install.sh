@@ -93,13 +93,13 @@ detect_lan_ip() {
   if [ -z "$_ip" ] && command -v hostname >/dev/null 2>&1; then
     _ip=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)
   fi
-  if [ -z "$_ip" ] && command -v ipconfig >/dev/null 2>&1; then
+  if [ -z "$_ip" ] && [ "$(uname -s)" = "Darwin" ] && command -v ipconfig >/dev/null 2>&1; then
     _ip=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)
   fi
   if [ -z "$_ip" ] && command -v ifconfig >/dev/null 2>&1; then
     _ip=$(ifconfig 2>/dev/null | sed -n 's/.*inet \([0-9.]*\) .*/\1/p' | grep -v '^127\.' | head -n 1 || true)
   fi
-  printf '%s' "$_ip"
+  if valid_ipv4 "$_ip"; then printf '%s' "$_ip"; fi
 }
 
 valid_ipv4() { printf '%s' "$1" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; }
